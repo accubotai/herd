@@ -1,0 +1,64 @@
+# SoloTerm Project Configuration
+# Copy this to solo.toml and customize for your project.
+
+[project]
+name = "my-app"
+
+# Define your processes — each gets its own terminal pane
+[[process]]
+name = "Dev Server"
+command = "npm run dev"
+working_dir = "."
+auto_restart = true
+section = "services"
+
+[[process]]
+name = "Database"
+command = "docker compose up postgres"
+auto_restart = true
+section = "services"
+lazy = true                        # Won't start automatically
+
+[[process]]
+name = "Claude Code"
+command = "claude"
+section = "agents"
+interactive = true                 # Accepts keyboard input
+
+[[process]]
+name = "Queue Worker"
+command = "php artisan queue:work"
+auto_restart = true
+restart_delay_ms = 1000
+section = "services"
+
+# File watcher — auto-restart when these files change
+# [process.watch]
+# paths = ["app/", "config/"]
+# ignore = ["storage/", "node_modules/"]
+
+# Environment variables for a process
+# [process.env]
+# APP_ENV = "local"
+# DEBUG = "true"
+
+# AI agent configuration (BYOK — Bring Your Own Key)
+[ai]
+mcp_enabled = true
+mcp_transport = "stdio"            # "stdio" or "http"
+
+# Configure your AI providers — keys come from environment variables
+# [ai.providers.anthropic]
+# api_key = "${ANTHROPIC_API_KEY}"
+# model = "claude-sonnet-4-20250514"
+
+# [ai.providers.openai]
+# api_key = "${OPENAI_API_KEY}"
+# model = "gpt-4o"
+
+# UI preferences
+[ui]
+theme = "dark"                     # "dark" | "light" | "system"
+font_family = "monospace"
+font_size = 14.0
+sidebar_width = 280

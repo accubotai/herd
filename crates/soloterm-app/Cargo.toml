@@ -1,0 +1,23 @@
+[package]
+name = "soloterm-app"
+version = "0.1.0"
+description = "GPU-accelerated terminal workspace for agentic development"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "soloterm"
+path = "src/main.rs"
+
+[dependencies]
+soloterm-core = { workspace = true }
+soloterm-terminal = { workspace = true }
+soloterm-config = { workspace = true }
+soloterm-mcp = { workspace = true }
+soloterm-notify = { workspace = true }
+iced = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+anyhow = { workspace = true }

@@ -1,0 +1,72 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/soloterm-app",
+    "crates/soloterm-core",
+    "crates/soloterm-terminal",
+    "crates/soloterm-mcp",
+    "crates/soloterm-config",
+    "crates/soloterm-notify",
+]
+
+[workspace.package]
+edition = "2021"
+rust-version = "1.80.0"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/soloterm/soloterm"
+
+[workspace.dependencies]
+# Internal crates
+soloterm-core = { path = "crates/soloterm-core" }
+soloterm-terminal = { path = "crates/soloterm-terminal" }
+soloterm-config = { path = "crates/soloterm-config" }
+soloterm-mcp = { path = "crates/soloterm-mcp" }
+soloterm-notify = { path = "crates/soloterm-notify" }
+
+# Terminal emulation
+alacritty_terminal = "0.25"
+vte = "0.15"
+
+# GPU rendering
+wgpu = "24"
+
+# UI framework
+iced = { version = "0.13", features = ["wgpu", "tokio"] }
+
+# Async runtime
+tokio = { version = "1", features = ["full"] }
+
+# Serialization & config
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+toml = "0.8"
+
+# Process management (Unix)
+nix = { version = "0.29", features = ["process", "signal", "term", "fs"] }
+rustix = { version = "1.0", features = ["std", "termios", "process"] }
+
+# File watching
+notify = "8"
+
+# Desktop notifications
+notify-rust = "4"
+
+# Logging
+log = "0.4"
+env_logger = "0.11"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# Error handling
+anyhow = "1"
+thiserror = "2"
+
+# Misc
+parking_lot = "0.12"
+unicode-width = "0.2"
+dirs = "6"
+regex = "1"
+
+[profile.release]
+lto = "thin"
+strip = true

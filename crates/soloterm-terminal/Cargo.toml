@@ -1,0 +1,16 @@
+[package]
+name = "soloterm-terminal"
+version = "0.1.0"
+description = "Terminal rendering bridge between alacritty_terminal and wgpu for SoloTerm"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+alacritty_terminal = { workspace = true }
+wgpu = { workspace = true }
+parking_lot = { workspace = true }
+unicode-width = { workspace = true }
+tracing = { workspace = true }
+thiserror = { workspace = true }
+vte = { workspace = true }

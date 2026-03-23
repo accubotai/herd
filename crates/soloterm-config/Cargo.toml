@@ -1,0 +1,18 @@
+[package]
+name = "soloterm-config"
+version = "0.1.0"
+description = "Configuration parsing and BYOK management for SoloTerm"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+serde = { workspace = true }
+toml = { workspace = true }
+thiserror = { workspace = true }
+dirs = { workspace = true }
+regex = { workspace = true }
+tracing = { workspace = true }
+
+[dev-dependencies]
+tempfile = "3"
