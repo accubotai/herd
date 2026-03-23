@@ -1562,7 +1562,11 @@ name = "herd-app"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "herd-config",
+ "herd-core",
+ "herd-terminal",
  "iced",
+ "tokio",
  "tracing",
  "tracing-subscriber",
 ]

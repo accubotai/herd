@@ -4,7 +4,8 @@
 *.swo
 *~
 
-# Local config (personal overrides)
+# Project config (user-specific, not part of repo source)
+herd.toml
 .herd.local
 
 # IDE

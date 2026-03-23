@@ -2,8 +2,10 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use std::time::Instant;
 
+use std::borrow::Cow;
+
 use alacritty_terminal::event::EventListener;
-use alacritty_terminal::event_loop::EventLoop;
+use alacritty_terminal::event_loop::{EventLoop, EventLoopSender, Msg};
 use alacritty_terminal::sync::FairMutex;
 use alacritty_terminal::term::Term;
 use alacritty_terminal::tty;
@@ -50,6 +52,7 @@ pub struct ProcessHandle {
     pub terminal: Arc<FairMutex<Term<EventProxy>>>,
     pub started_at: Option<Instant>,
     event_sender: tokio::sync::mpsc::UnboundedSender<ProcessEvent>,
+    pty_sender: Option<EventLoopSender>,
     #[allow(clippy::used_underscore_binding)]
     _event_loop_handle: Option<
         std::thread::JoinHandle<(
@@ -152,6 +155,7 @@ impl ProcessHandle {
             terminal,
             started_at: None,
             event_sender: sender,
+            pty_sender: None,
             _event_loop_handle: None,
         }
     }
@@ -190,6 +194,8 @@ impl ProcessHandle {
             false, // ref_test
         )?;
 
+        // Capture PTY write channel before spawning (moves event_loop)
+        self.pty_sender = Some(event_loop.channel());
         let loop_handle = event_loop.spawn();
         self._event_loop_handle = Some(loop_handle);
         self.state = ProcessState::Running;
@@ -231,9 +237,11 @@ impl ProcessHandle {
         }
     }
 
-    /// Write bytes to the PTY (keyboard input)
-    pub fn write_to_pty(&self, _data: &[u8]) {
-        // Will be implemented when we wire up PTY fd writing
+    /// Write bytes to the PTY (keyboard input).
+    pub fn write_to_pty(&self, data: &[u8]) {
+        if let Some(sender) = &self.pty_sender {
+            let _ = sender.send(Msg::Input(Cow::Owned(data.to_vec())));
+        }
     }
 
     /// Resize the terminal

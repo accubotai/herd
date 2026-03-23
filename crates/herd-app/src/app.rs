@@ -1,54 +1,131 @@
-use iced::widget::{column, container, row, text};
-use iced::{Element, Length, Theme};
+// Hex color literals (0xRRGGBB) are intentionally without separators.
+#![allow(clippy::unreadable_literal)]
 
-/// Main `Herd` application state.
-#[derive(Default)]
+use std::env;
+use std::time::Duration;
+
+use herd_config::HerdConfig;
+use herd_core::process::ProcessState;
+use herd_core::Supervisor;
+use herd_terminal::grid_adapter;
+use iced::keyboard;
+use iced::widget::{button, column, container, row, scrollable, text, Column};
+use iced::{color, Element, Font, Length, Subscription, Theme};
+
+/// Main Herd application state.
 pub(crate) struct HerdApp {
-    /// Status message
+    config: Option<HerdConfig>,
+    supervisor: Supervisor,
+    /// Name of the focused process (shown in terminal pane).
+    focused: Option<String>,
+    /// Ordered list of process names for sidebar display.
+    process_order: Vec<String>,
+    /// Terminal text content for the focused process.
+    terminal_text: String,
+    /// Status bar message.
     status: String,
+    /// Whether processes have been started.
+    started: bool,
 }
 
 #[derive(Debug, Clone)]
 pub(crate) enum Message {
-    // Placeholder — real messages will be added in Phase 2
+    /// Select a process in the sidebar.
+    SelectProcess(String),
+    /// Start all non-lazy processes.
+    StartAll,
+    /// Stop all processes.
+    StopAll,
+    /// Periodic tick to poll terminal state.
+    Tick,
+    /// Keyboard event from iced.
+    KeyPressed(keyboard::Key, keyboard::Modifiers),
+}
+
+impl Default for HerdApp {
+    fn default() -> Self {
+        let cwd = env::current_dir().unwrap_or_default();
+        let config = HerdConfig::find_and_load(&cwd).ok();
+
+        let mut supervisor = Supervisor::new();
+        let mut process_order = Vec::new();
+
+        if let Some(cfg) = &config {
+            for proc in &cfg.process {
+                supervisor.add_process(proc);
+                process_order.push(proc.name.clone());
+            }
+        }
+
+        let focused = process_order.first().cloned();
+        let status = config.as_ref().map_or_else(
+            || "No herd.toml found — create one to get started".to_string(),
+            |c| format!("Project: {}", c.project.name),
+        );
+
+        Self {
+            config,
+            supervisor,
+            focused,
+            process_order,
+            terminal_text: String::new(),
+            status,
+            started: false,
+        }
+    }
 }
 
 impl HerdApp {
-    #[allow(clippy::unused_self)]
-    pub(crate) fn update(&mut self, _message: Message) {
-        // Will handle real messages in Phase 2
+    pub(crate) fn update(&mut self, message: Message) {
+        match message {
+            Message::SelectProcess(name) => {
+                self.focused = Some(name);
+                self.refresh_terminal_text();
+            }
+            Message::StartAll => {
+                let errors = self.supervisor.start_all();
+                if errors.is_empty() {
+                    self.status = "All processes started".to_string();
+                } else {
+                    self.status = format!("{} process(es) failed to start", errors.len());
+                }
+                self.started = true;
+                self.refresh_terminal_text();
+            }
+            Message::StopAll => {
+                self.supervisor.stop_all();
+                self.status = "All processes stopped".to_string();
+                self.refresh_terminal_text();
+            }
+            Message::Tick => {
+                // Auto-start processes on first tick
+                if !self.started && self.config.is_some() {
+                    let errors = self.supervisor.start_all();
+                    if !errors.is_empty() {
+                        self.status = format!("{} process(es) failed to start", errors.len());
+                    }
+                    self.started = true;
+                }
+                self.refresh_terminal_text();
+            }
+            Message::KeyPressed(key, modifiers) => {
+                self.handle_key(&key, modifiers);
+            }
+        }
     }
 
     pub(crate) fn view(&self) -> Element<'_, Message> {
-        let sidebar = container(
-            column![
-                text("Herd").size(20),
-                text("─────────────").size(14),
-                text("No processes configured").size(12),
-                text(""),
-                text("Create a herd.toml to get started").size(11),
-            ]
-            .spacing(8)
-            .padding(16),
-        )
-        .width(Length::Fixed(250.0))
-        .height(Length::Fill);
+        let sidebar = self.view_sidebar();
 
-        let terminal_area = container(
-            column![
-                text("Terminal").size(16),
-                text("────────────────────────────").size(14),
-                text(&self.status).size(13),
-                text(""),
-                text("Phase 1: GPU-rendered terminal coming next").size(12),
-            ]
-            .spacing(8)
-            .padding(16),
-        )
-        .width(Length::Fill)
-        .height(Length::Fill);
+        let terminal_area = self.view_terminal();
 
-        let content = row![sidebar, terminal_area];
+        let status_bar =
+            container(text(&self.status).size(12).color(color!(0x888888))).padding([4, 16]);
+
+        let content = column![
+            row![sidebar, terminal_area].height(Length::Fill),
+            status_bar,
+        ];
 
         container(content)
             .width(Length::Fill)
@@ -57,7 +134,264 @@ impl HerdApp {
     }
 
     #[allow(clippy::unused_self)]
+    pub(crate) fn subscription(&self) -> Subscription<Message> {
+        let tick = iced::time::every(Duration::from_millis(100)).map(|_| Message::Tick);
+        let keys =
+            keyboard::on_key_press(|key, modifiers| Some(Message::KeyPressed(key, modifiers)));
+        Subscription::batch(vec![tick, keys])
+    }
+
+    #[allow(clippy::unused_self)]
     pub(crate) fn theme(&self) -> Theme {
         Theme::Dark
+    }
+
+    // ── Sidebar ──
+
+    fn view_sidebar(&self) -> Element<'_, Message> {
+        let mut sidebar_content: Vec<Element<'_, Message>> = vec![
+            text("Herd").size(20).into(),
+            text("─────────────")
+                .size(12)
+                .color(color!(0x555555))
+                .into(),
+        ];
+
+        if self.process_order.is_empty() {
+            sidebar_content.push(
+                text("No processes configured")
+                    .size(12)
+                    .color(color!(0x888888))
+                    .into(),
+            );
+        } else {
+            // Display processes in config order with section headers
+            let mut last_section = String::new();
+            for name in &self.process_order {
+                let (state, section) = self
+                    .supervisor
+                    .get_process(name)
+                    .map_or((ProcessState::Pending, "services"), |h| {
+                        (h.state, h.info.section.as_str())
+                    });
+
+                // Section header when section changes
+                if section != last_section {
+                    sidebar_content.push(
+                        text(section.to_uppercase())
+                            .size(11)
+                            .color(color!(0x666666))
+                            .into(),
+                    );
+                    last_section = section.to_string();
+                }
+
+                let is_focused = self.focused.as_deref() == Some(name.as_str());
+                sidebar_content.push(self.view_process_item(name, state, is_focused));
+            }
+
+            // Control buttons
+            sidebar_content.push(text("").into());
+            sidebar_content.push(
+                row![
+                    button(text("Start All").size(11))
+                        .on_press(Message::StartAll)
+                        .padding([4, 8]),
+                    button(text("Stop All").size(11))
+                        .on_press(Message::StopAll)
+                        .padding([4, 8]),
+                ]
+                .spacing(4)
+                .into(),
+            );
+        }
+
+        container(Column::from_vec(sidebar_content).spacing(4).padding(12))
+            .width(Length::Fixed(220.0))
+            .height(Length::Fill)
+            .style(|_theme: &Theme| container::Style {
+                background: Some(iced::Background::Color(color!(0x1a1a2e))),
+                ..Default::default()
+            })
+            .into()
+    }
+
+    #[allow(clippy::unused_self)]
+    fn view_process_item<'a>(
+        &self,
+        name: &'a str,
+        state: ProcessState,
+        is_focused: bool,
+    ) -> Element<'a, Message> {
+        let (indicator, indicator_color) = match state {
+            ProcessState::Running => ("●", color!(0x00cc66)),
+            ProcessState::Pending => ("○", color!(0x666666)),
+            ProcessState::Stopped => ("■", color!(0x888888)),
+            ProcessState::Crashed => ("●", color!(0xff4444)),
+            ProcessState::Exited => ("○", color!(0x448844)),
+            ProcessState::Restarting => ("◌", color!(0xffaa00)),
+        };
+
+        let bg = if is_focused {
+            color!(0x2a2a4e)
+        } else {
+            color!(0x1a1a2e)
+        };
+
+        let name_owned = name.to_string();
+        button(
+            row![
+                text(indicator).size(10).color(indicator_color),
+                text(name).size(13).color(color!(0xcccccc)),
+            ]
+            .spacing(6)
+            .align_y(iced::Alignment::Center),
+        )
+        .on_press(Message::SelectProcess(name_owned))
+        .padding([4, 8])
+        .width(Length::Fill)
+        .style(move |_theme: &Theme, _status| button::Style {
+            background: Some(iced::Background::Color(bg)),
+            text_color: color!(0xcccccc),
+            border: iced::Border::default(),
+            shadow: iced::Shadow::default(),
+        })
+        .into()
+    }
+
+    // ── Terminal pane ──
+
+    fn view_terminal(&self) -> Element<'_, Message> {
+        let header = if let Some(name) = &self.focused {
+            let state = self
+                .supervisor
+                .get_process(name)
+                .map_or(ProcessState::Pending, |h| h.state);
+            let state_str = match state {
+                ProcessState::Running => "running",
+                ProcessState::Pending => "pending",
+                ProcessState::Stopped => "stopped",
+                ProcessState::Crashed => "crashed",
+                ProcessState::Exited => "exited",
+                ProcessState::Restarting => "restarting",
+            };
+            row![
+                text(name).size(14).color(color!(0xdddddd)),
+                text(format!(" [{state_str}]"))
+                    .size(12)
+                    .color(color!(0x888888)),
+            ]
+        } else {
+            row![text("No process selected").size(14).color(color!(0x888888))]
+        };
+
+        let terminal_content = scrollable(
+            container(
+                text(&self.terminal_text)
+                    .size(13)
+                    .font(Font::MONOSPACE)
+                    .color(color!(0xcccccc)),
+            )
+            .padding(8),
+        )
+        .height(Length::Fill);
+
+        container(column![
+            container(header).padding([8, 12]),
+            terminal_content,
+        ])
+        .width(Length::Fill)
+        .height(Length::Fill)
+        .style(|_theme: &Theme| container::Style {
+            background: Some(iced::Background::Color(color!(0x0d0d1a))),
+            ..Default::default()
+        })
+        .into()
+    }
+
+    // ── Terminal text extraction ──
+
+    fn refresh_terminal_text(&mut self) {
+        let Some(name) = &self.focused else {
+            self.terminal_text.clear();
+            return;
+        };
+
+        let Some(handle) = self.supervisor.get_process(name) else {
+            self.terminal_text.clear();
+            return;
+        };
+
+        let term = handle.terminal.lock();
+        let content = grid_adapter::extract_content(&*term);
+
+        let mut output = String::with_capacity(content.cols * content.rows);
+        let mut current_line: usize = 0;
+
+        for cell in &content.cells {
+            // Add newlines for skipped lines
+            while current_line < cell.y {
+                output.push('\n');
+                current_line += 1;
+            }
+            output.push(cell.character);
+        }
+
+        self.terminal_text = output.trim_end().to_string();
+    }
+
+    // ── Keyboard handling ──
+
+    fn handle_key(&mut self, key: &keyboard::Key, modifiers: keyboard::Modifiers) {
+        if modifiers.command() {
+            return;
+        }
+
+        if let Some(name) = &self.focused {
+            if let Some(handle) = self.supervisor.get_process(name) {
+                if handle.is_running() {
+                    if let Some(bytes) = key_to_bytes(key, modifiers) {
+                        handle.write_to_pty(&bytes);
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// Convert an iced keyboard event to bytes for PTY input.
+fn key_to_bytes(key: &keyboard::Key, modifiers: keyboard::Modifiers) -> Option<Vec<u8>> {
+    match key {
+        keyboard::Key::Character(c) => {
+            let ch = c.chars().next()?;
+            if modifiers.control() {
+                let code = ch.to_ascii_lowercase() as u8;
+                if code.is_ascii_lowercase() {
+                    return Some(vec![code - b'a' + 1]);
+                }
+            }
+            Some(c.as_bytes().to_vec())
+        }
+        keyboard::Key::Named(named) => {
+            let bytes = match named {
+                keyboard::key::Named::Enter => b"\r".to_vec(),
+                keyboard::key::Named::Backspace => vec![0x7f],
+                keyboard::key::Named::Tab => b"\t".to_vec(),
+                keyboard::key::Named::Escape => vec![0x1b],
+                keyboard::key::Named::ArrowUp => b"\x1b[A".to_vec(),
+                keyboard::key::Named::ArrowDown => b"\x1b[B".to_vec(),
+                keyboard::key::Named::ArrowRight => b"\x1b[C".to_vec(),
+                keyboard::key::Named::ArrowLeft => b"\x1b[D".to_vec(),
+                keyboard::key::Named::Home => b"\x1b[H".to_vec(),
+                keyboard::key::Named::End => b"\x1b[F".to_vec(),
+                keyboard::key::Named::PageUp => b"\x1b[5~".to_vec(),
+                keyboard::key::Named::PageDown => b"\x1b[6~".to_vec(),
+                keyboard::key::Named::Delete => b"\x1b[3~".to_vec(),
+                keyboard::key::Named::Space => b" ".to_vec(),
+                _ => return None,
+            };
+            Some(bytes)
+        }
+        keyboard::Key::Unidentified => None,
     }
 }
