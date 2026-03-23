@@ -33,7 +33,12 @@ pub fn sanitize_output(input: &[u8]) -> Vec<u8> {
             if let Some((action, advance)) = classify_escape(&input[i..]) {
                 match action {
                     EscapeAction::Allow => {
-                        output.extend_from_slice(&input[i..i + advance]);
+                        // Copy allowed sequence, but strip any embedded C1 codes
+                        for &b in &input[i..i + advance] {
+                            if !is_c1_code(b) {
+                                output.push(b);
+                            }
+                        }
                     }
                     EscapeAction::Block => {
                         tracing::debug!("Blocked escape sequence at offset {i}");
@@ -388,5 +393,64 @@ mod tests {
         let input = b"\x1b#visible";
         let output = sanitize_output(input);
         assert_eq!(output, b"visible");
+    }
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used)]
+mod proptests {
+    use super::*;
+    use proptest::prelude::*;
+
+    proptest! {
+        /// Sanitizer must never panic on arbitrary input.
+        #[test]
+        fn sanitize_never_panics(input in proptest::collection::vec(any::<u8>(), 0..1024)) {
+            let _ = sanitize_output(&input);
+        }
+
+        /// Output must never contain OSC 52 (clipboard write).
+        #[test]
+        fn output_never_contains_osc52(input in proptest::collection::vec(any::<u8>(), 0..512)) {
+            let output = sanitize_output(&input);
+            // Check no 7-bit OSC 52
+            let as_str = String::from_utf8_lossy(&output);
+            prop_assert!(!as_str.contains("\x1b]52"), "output contains OSC 52");
+            // Check no 8-bit OSC 52
+            for (i, &b) in output.iter().enumerate() {
+                if b == 0x9D {
+                    // 8-bit OSC — check if followed by "52"
+                    if i + 2 < output.len() && output[i+1] == b'5' && output[i+2] == b'2' {
+                        prop_assert!(false, "output contains 8-bit OSC 52 at offset {i}");
+                    }
+                }
+            }
+        }
+
+        /// Output must never contain 8-bit C1 control codes.
+        #[test]
+        fn output_never_contains_c1_codes(input in proptest::collection::vec(any::<u8>(), 0..512)) {
+            let output = sanitize_output(&input);
+            for (i, &b) in output.iter().enumerate() {
+                prop_assert!(
+                    !matches!(b, 0x90 | 0x9B | 0x9D | 0x9E | 0x9F),
+                    "output contains C1 code 0x{b:02x} at offset {i}"
+                );
+            }
+        }
+
+        /// Output length must never exceed input length (sanitizer only removes).
+        #[test]
+        fn output_no_longer_than_input(input in proptest::collection::vec(any::<u8>(), 0..512)) {
+            let output = sanitize_output(&input);
+            prop_assert!(output.len() <= input.len());
+        }
+
+        /// Plain ASCII text with no escape chars passes through unchanged.
+        #[test]
+        fn ascii_passthrough(input in "[a-zA-Z0-9 ,.!?]{0,256}") {
+            let output = sanitize_output(input.as_bytes());
+            prop_assert_eq!(&output, input.as_bytes());
+        }
     }
 }

@@ -70,6 +70,10 @@ unicode-width = "0.2"
 dirs = "6"
 regex = "1"
 
+# Testing
+proptest = "1"
+tempfile = "3"
+
 # ── Workspace-wide lint configuration ──
 [workspace.lints.rust]
 unsafe_code = "deny"

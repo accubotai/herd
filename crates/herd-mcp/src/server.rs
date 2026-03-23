@@ -196,3 +196,175 @@ impl McpServer {
         ])
     }
 }
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used)]
+mod tests {
+    use super::*;
+
+    fn server() -> McpServer {
+        McpServer::new(Transport::Stdio)
+    }
+
+    fn request(method: &str) -> Value {
+        serde_json::json!({ "jsonrpc": "2.0", "id": 1, "method": method })
+    }
+
+    // ── Initialization ──
+
+    #[test]
+    fn test_initialize_returns_protocol_version() {
+        let s = server();
+        let resp = s.handle_request(&request("initialize"));
+        assert_eq!(resp["protocolVersion"], "2024-11-05");
+        assert_eq!(resp["serverInfo"]["name"], "herd");
+        assert!(resp["capabilities"]["tools"].is_object());
+        assert!(resp["capabilities"]["resources"].is_object());
+    }
+
+    #[test]
+    fn test_initialize_propagates_id() {
+        let s = server();
+        let resp = s.handle_request(&request("initialize"));
+        assert_eq!(resp["id"], 1);
+    }
+
+    // ── Tools ──
+
+    #[test]
+    fn test_tools_list_returns_6_tools() {
+        let s = server();
+        let resp = s.handle_request(&request("tools/list"));
+        let tools = resp["tools"].as_array().unwrap();
+        assert_eq!(tools.len(), 6);
+    }
+
+    #[test]
+    fn test_tools_list_no_run_command() {
+        let s = server();
+        let resp = s.handle_request(&request("tools/list"));
+        let tools = resp["tools"].as_array().unwrap();
+        let names: Vec<&str> = tools.iter().map(|t| t["name"].as_str().unwrap()).collect();
+        assert!(
+            !names.contains(&"run_command"),
+            "run_command must not be exposed (RCE vector)"
+        );
+    }
+
+    #[test]
+    fn test_tools_list_expected_names() {
+        let s = server();
+        let resp = s.handle_request(&request("tools/list"));
+        let tools = resp["tools"].as_array().unwrap();
+        let names: Vec<&str> = tools.iter().map(|t| t["name"].as_str().unwrap()).collect();
+        assert!(names.contains(&"list_processes"));
+        assert!(names.contains(&"get_process_output"));
+        assert!(names.contains(&"restart_process"));
+        assert!(names.contains(&"stop_process"));
+        assert!(names.contains(&"start_process"));
+        assert!(names.contains(&"get_process_health"));
+    }
+
+    #[test]
+    fn test_tools_have_input_schemas() {
+        let s = server();
+        let resp = s.handle_request(&request("tools/list"));
+        let tools = resp["tools"].as_array().unwrap();
+        for tool in tools {
+            assert!(
+                tool["inputSchema"].is_object(),
+                "Tool '{}' missing inputSchema",
+                tool["name"]
+            );
+        }
+    }
+
+    #[test]
+    fn test_tool_call_returns_stub() {
+        let s = server();
+        let req = serde_json::json!({
+            "jsonrpc": "2.0", "id": 2, "method": "tools/call",
+            "params": { "name": "list_processes", "arguments": {} }
+        });
+        let resp = s.handle_request(&req);
+        assert!(resp["content"].is_array());
+    }
+
+    // ── Resources ──
+
+    #[test]
+    fn test_resources_list() {
+        let s = server();
+        let resp = s.handle_request(&request("resources/list"));
+        let resources = resp["resources"].as_array().unwrap();
+        assert_eq!(resources.len(), 2);
+        let uris: Vec<&str> = resources
+            .iter()
+            .map(|r| r["uri"].as_str().unwrap())
+            .collect();
+        assert!(uris.contains(&"process://list"));
+        assert!(uris.contains(&"config://herd.toml"));
+    }
+
+    #[test]
+    fn test_resource_read_returns_stub() {
+        let s = server();
+        let req = serde_json::json!({
+            "jsonrpc": "2.0", "id": 3, "method": "resources/read",
+            "params": { "uri": "process://list" }
+        });
+        let resp = s.handle_request(&req);
+        assert!(resp["contents"].is_array());
+    }
+
+    // ── Error handling ──
+
+    #[test]
+    fn test_unknown_method_returns_error() {
+        let s = server();
+        let resp = s.handle_request(&request("nonexistent/method"));
+        assert_eq!(resp["error"]["code"], -32601);
+        assert!(resp["error"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("nonexistent/method"));
+    }
+
+    #[test]
+    fn test_missing_method_returns_error() {
+        let s = server();
+        let req = serde_json::json!({ "jsonrpc": "2.0", "id": 1 });
+        let resp = s.handle_request(&req);
+        assert_eq!(resp["error"]["code"], -32600);
+    }
+
+    #[test]
+    fn test_method_truncated_in_error() {
+        let s = server();
+        let long_method = "x".repeat(200);
+        let resp = s.handle_request(&request(&long_method));
+        let msg = resp["error"]["message"].as_str().unwrap();
+        // Method should be truncated to 100 chars
+        assert!(msg.len() < 150);
+    }
+
+    // ── Transport ──
+
+    #[test]
+    fn test_http_transport_binds_localhost() {
+        let transport = Transport::http(8080);
+        match transport {
+            Transport::Http { bind_address, port } => {
+                assert_eq!(bind_address, std::net::Ipv4Addr::LOCALHOST);
+                assert_eq!(port, 8080);
+            }
+            Transport::Stdio => unreachable!("Expected HTTP transport"),
+        }
+    }
+
+    #[test]
+    fn test_start_does_not_panic() {
+        let s = server();
+        assert!(s.start().is_ok());
+    }
+}

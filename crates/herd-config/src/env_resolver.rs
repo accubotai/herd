@@ -70,3 +70,39 @@ mod tests {
         env::remove_var("HERD_SET_VAR");
     }
 }
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used)]
+mod proptests {
+    use super::*;
+    use proptest::prelude::*;
+
+    proptest! {
+        /// Resolver must never panic on arbitrary input strings.
+        #[test]
+        fn resolve_never_panics(input in "\\PC{0,256}") {
+            let _ = resolve(&input);
+        }
+
+        /// Strings without ${} patterns pass through unchanged.
+        #[test]
+        fn no_vars_passthrough(input in "[a-zA-Z0-9 ,.!?/:-]{0,128}") {
+            // Only if input doesn't contain ${ ... }
+            if !input.contains("${") {
+                prop_assert_eq!(resolve(&input), input);
+            }
+        }
+
+        /// Output never contains unresolved ${VAR} patterns
+        /// (they resolve to empty string or default).
+        #[test]
+        fn output_has_no_unresolved_vars(
+            var_name in "[A-Z_]{1,8}",
+            default in "[a-z]{0,8}"
+        ) {
+            let input = format!("${{{var_name}:-{default}}}");
+            let output = resolve(&input);
+            prop_assert!(!output.contains("${"), "output still contains ${{: {output}");
+        }
+    }
+}

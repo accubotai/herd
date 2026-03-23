@@ -154,3 +154,164 @@ fn convert_flags(flags: Flags) -> CellFlags {
         hidden: flags.contains(Flags::HIDDEN),
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ── Color conversion ──
+
+    #[test]
+    fn test_convert_named_color_standard() {
+        assert!(matches!(
+            convert_named_color(NamedColor::Red),
+            NamedColorId::Red
+        ));
+        assert!(matches!(
+            convert_named_color(NamedColor::Green),
+            NamedColorId::Green
+        ));
+        assert!(matches!(
+            convert_named_color(NamedColor::Blue),
+            NamedColorId::Blue
+        ));
+    }
+
+    #[test]
+    fn test_convert_named_color_bright() {
+        assert!(matches!(
+            convert_named_color(NamedColor::BrightRed),
+            NamedColorId::BrightRed
+        ));
+        assert!(matches!(
+            convert_named_color(NamedColor::BrightWhite),
+            NamedColorId::BrightWhite
+        ));
+    }
+
+    #[test]
+    fn test_convert_named_color_dim_maps_to_base() {
+        assert!(matches!(
+            convert_named_color(NamedColor::DimRed),
+            NamedColorId::Red
+        ));
+        assert!(matches!(
+            convert_named_color(NamedColor::DimGreen),
+            NamedColorId::Green
+        ));
+        assert!(matches!(
+            convert_named_color(NamedColor::DimWhite),
+            NamedColorId::White
+        ));
+    }
+
+    #[test]
+    fn test_convert_named_color_special() {
+        assert!(matches!(
+            convert_named_color(NamedColor::Foreground),
+            NamedColorId::Foreground
+        ));
+        assert!(matches!(
+            convert_named_color(NamedColor::Background),
+            NamedColorId::Background
+        ));
+        assert!(matches!(
+            convert_named_color(NamedColor::Cursor),
+            NamedColorId::Cursor
+        ));
+        assert!(matches!(
+            convert_named_color(NamedColor::BrightForeground),
+            NamedColorId::Foreground
+        ));
+        assert!(matches!(
+            convert_named_color(NamedColor::DimForeground),
+            NamedColorId::Foreground
+        ));
+    }
+
+    #[test]
+    fn test_convert_color_rgb() {
+        let color = Color::Spec(alacritty_terminal::vte::ansi::Rgb {
+            r: 255,
+            g: 128,
+            b: 0,
+        });
+        let result = convert_color(color);
+        assert!(matches!(result, CellColor::Rgb(255, 128, 0)));
+    }
+
+    #[test]
+    fn test_convert_color_indexed() {
+        let color = Color::Indexed(42);
+        let result = convert_color(color);
+        assert!(matches!(result, CellColor::Indexed(42)));
+    }
+
+    // ── Flag conversion ──
+
+    #[test]
+    fn test_convert_flags_empty() {
+        let flags = Flags::empty();
+        let result = convert_flags(flags);
+        assert!(!result.bold);
+        assert!(!result.italic);
+        assert!(!result.underline);
+        assert!(!result.dim);
+        assert!(!result.inverse);
+        assert!(!result.strikethrough);
+        assert!(!result.hidden);
+    }
+
+    #[test]
+    fn test_convert_flags_bold() {
+        let flags = Flags::BOLD;
+        let result = convert_flags(flags);
+        assert!(result.bold);
+        assert!(!result.italic);
+    }
+
+    #[test]
+    fn test_convert_flags_combined() {
+        let flags = Flags::BOLD | Flags::ITALIC | Flags::DIM;
+        let result = convert_flags(flags);
+        assert!(result.bold);
+        assert!(result.italic);
+        assert!(result.dim);
+        assert!(!result.underline);
+    }
+
+    #[test]
+    fn test_convert_flags_inverse() {
+        let flags = Flags::INVERSE;
+        let result = convert_flags(flags);
+        assert!(result.inverse);
+    }
+
+    #[test]
+    fn test_convert_flags_strikethrough() {
+        let flags = Flags::STRIKEOUT;
+        let result = convert_flags(flags);
+        assert!(result.strikethrough);
+    }
+
+    #[test]
+    fn test_convert_flags_hidden() {
+        let flags = Flags::HIDDEN;
+        let result = convert_flags(flags);
+        assert!(result.hidden);
+    }
+
+    // ── CellFlags default ──
+
+    #[test]
+    fn test_cell_flags_default_all_false() {
+        let flags = CellFlags::default();
+        assert!(!flags.bold);
+        assert!(!flags.italic);
+        assert!(!flags.underline);
+        assert!(!flags.dim);
+        assert!(!flags.inverse);
+        assert!(!flags.strikethrough);
+        assert!(!flags.hidden);
+    }
+}

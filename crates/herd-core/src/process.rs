@@ -265,3 +265,152 @@ impl Drop for ProcessHandle {
         self.stop();
     }
 }
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used)]
+mod tests {
+    use super::*;
+
+    fn sample_info() -> ProcessInfo {
+        ProcessInfo {
+            name: "test-proc".to_string(),
+            command: "echo hello".to_string(),
+            working_dir: None,
+            section: "default".to_string(),
+            auto_restart: false,
+            lazy: false,
+            interactive: false,
+            restart_delay_ms: None,
+            env: HashMap::new(),
+        }
+    }
+
+    // --- ProcessState tests ---
+
+    #[test]
+    fn process_state_enum_values_are_distinct() {
+        let states = [
+            ProcessState::Pending,
+            ProcessState::Running,
+            ProcessState::Stopped,
+            ProcessState::Crashed,
+            ProcessState::Exited,
+            ProcessState::Restarting,
+        ];
+        // Every pair should be unequal
+        for (i, a) in states.iter().enumerate() {
+            for (j, b) in states.iter().enumerate() {
+                if i == j {
+                    assert_eq!(a, b);
+                } else {
+                    assert_ne!(a, b, "states at index {i} and {j} should differ");
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn process_state_is_copy_and_clone() {
+        let s = ProcessState::Running;
+        let s2 = s; // Copy
+        let s3 = s; // Copy (same as Clone for Copy types)
+        assert_eq!(s, s2);
+        assert_eq!(s, s3);
+    }
+
+    #[test]
+    fn process_state_debug_format() {
+        // Ensure Debug is derived and produces reasonable output
+        let dbg = format!("{:?}", ProcessState::Pending);
+        assert_eq!(dbg, "Pending");
+    }
+
+    // --- ProcessHandle tests ---
+
+    #[test]
+    fn new_creates_handle_in_pending_state() {
+        let (sender, _rx) = tokio::sync::mpsc::unbounded_channel();
+        let handle = ProcessHandle::new(sample_info(), sender);
+        assert_eq!(handle.state, ProcessState::Pending);
+        assert!(handle.pid.is_none());
+        assert!(handle.started_at.is_none());
+    }
+
+    #[test]
+    fn new_creates_terminal_with_correct_dimensions() {
+        use alacritty_terminal::grid::Dimensions;
+        let (sender, _rx) = tokio::sync::mpsc::unbounded_channel();
+        let handle = ProcessHandle::new(sample_info(), sender);
+        let term = handle.terminal.lock();
+        assert_eq!(term.columns(), pty::DEFAULT_COLS as usize);
+        assert_eq!(term.screen_lines(), pty::DEFAULT_ROWS as usize);
+    }
+
+    #[test]
+    fn is_running_returns_false_when_pending() {
+        let (sender, _rx) = tokio::sync::mpsc::unbounded_channel();
+        let handle = ProcessHandle::new(sample_info(), sender);
+        assert!(!handle.is_running());
+    }
+
+    #[test]
+    fn is_running_reflects_state() {
+        let (sender, _rx) = tokio::sync::mpsc::unbounded_channel();
+        let mut handle = ProcessHandle::new(sample_info(), sender);
+
+        // Manually set state to Running (without spawning a real process)
+        handle.state = ProcessState::Running;
+        assert!(handle.is_running());
+
+        handle.state = ProcessState::Stopped;
+        assert!(!handle.is_running());
+
+        handle.state = ProcessState::Crashed;
+        assert!(!handle.is_running());
+
+        handle.state = ProcessState::Exited;
+        assert!(!handle.is_running());
+
+        handle.state = ProcessState::Restarting;
+        assert!(!handle.is_running());
+    }
+
+    #[test]
+    fn process_info_stores_fields_correctly() {
+        let mut env = HashMap::new();
+        env.insert("FOO".to_string(), "bar".to_string());
+
+        let info = ProcessInfo {
+            name: "web".to_string(),
+            command: "npm start".to_string(),
+            working_dir: Some(PathBuf::from("/tmp")),
+            section: "services".to_string(),
+            auto_restart: true,
+            lazy: true,
+            interactive: false,
+            restart_delay_ms: Some(500),
+            env: env.clone(),
+        };
+
+        assert_eq!(info.name, "web");
+        assert_eq!(info.command, "npm start");
+        assert_eq!(info.working_dir, Some(PathBuf::from("/tmp")));
+        assert_eq!(info.section, "services");
+        assert!(info.auto_restart);
+        assert!(info.lazy);
+        assert!(!info.interactive);
+        assert_eq!(info.restart_delay_ms, Some(500));
+        assert_eq!(info.env.get("FOO").unwrap(), "bar");
+    }
+
+    #[test]
+    fn event_proxy_clone() {
+        let (sender, _rx) = tokio::sync::mpsc::unbounded_channel();
+        let proxy = EventProxy {
+            process_name: "test".to_string(),
+            sender,
+        };
+        let proxy2 = proxy.clone();
+        assert_eq!(proxy.process_name, proxy2.process_name);
+    }
+}

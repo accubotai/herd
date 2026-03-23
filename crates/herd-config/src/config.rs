@@ -267,3 +267,38 @@ DEBUG = "true"
         assert!(!config.ai.mcp_enabled);
     }
 }
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used)]
+mod proptests {
+    use super::*;
+    use proptest::prelude::*;
+
+    proptest! {
+        /// Parsing arbitrary strings as TOML must never panic.
+        /// It may return an error, but must not crash.
+        #[test]
+        fn parse_arbitrary_toml_never_panics(input in "\\PC{0,512}") {
+            let _ = toml::from_str::<HerdConfig>(&input);
+        }
+
+        /// Any valid project name should parse without error.
+        #[test]
+        fn valid_project_name_parses(name in "[a-zA-Z0-9_-]{1,64}") {
+            let toml_str = format!("[project]\nname = \"{name}\"");
+            let config: HerdConfig = toml::from_str(&toml_str).unwrap();
+            prop_assert_eq!(config.project.name, name);
+        }
+
+        /// Any valid command string in a process config should parse.
+        #[test]
+        fn valid_command_parses(cmd in "[a-zA-Z0-9 ./_-]{1,128}") {
+            let toml_str = format!(
+                "[[process]]\nname = \"test\"\ncommand = \"{}\"",
+                cmd.replace('\\', "\\\\").replace('"', "\\\"")
+            );
+            let result = toml::from_str::<HerdConfig>(&toml_str);
+            prop_assert!(result.is_ok());
+        }
+    }
+}

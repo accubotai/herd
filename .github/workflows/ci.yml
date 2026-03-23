@@ -40,16 +40,23 @@ jobs:
       - name: Run clippy (strict — deny all warnings)
         run: cargo clippy --workspace --all-targets -- -D warnings
 
-      - name: Check for debug artifacts
+      - name: Check for debug artifacts in production code
         run: |
           if grep -rn --include='*.rs' -E '^\s*(dbg!|todo!|unimplemented!)' crates/ | grep -v '#\[cfg(test)\]' | grep -v '/tests/' | grep -v 'test_' | head -1 | grep -q .; then
-            echo "Found dbg!/todo!/unimplemented! in non-test code"
+            echo "::error::Found dbg!/todo!/unimplemented! in non-test code"
             grep -rn --include='*.rs' -E '^\s*(dbg!|todo!|unimplemented!)' crates/ | grep -v '#\[cfg(test)\]' | grep -v '/tests/' | grep -v 'test_' | head -5
             exit 1
           fi
 
       - name: Check documentation builds
         run: cargo doc --workspace --no-deps
+        env:
+          RUSTDOCFLAGS: "-D warnings"
+
+      - name: Verify no unused dependencies
+        run: |
+          cargo install cargo-machete --quiet
+          cargo machete || echo "::warning::cargo-machete found potentially unused dependencies"
 
   test:
     name: Test
@@ -64,8 +71,35 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y $APT_DEPS
 
-      - name: Run tests
+      - name: Run tests (unit + property-based)
         run: cargo test --workspace
+
+      - name: Verify test count is not regressing
+        run: |
+          COUNT=$(cargo test --workspace 2>&1 | grep -E "^test result:" | awk '{sum += $4} END {print sum}')
+          echo "Total tests: $COUNT"
+          if [ "$COUNT" -lt 100 ]; then
+            echo "::error::Test count ($COUNT) dropped below minimum threshold (100)"
+            exit 1
+          fi
+
+  msrv:
+    name: Minimum Supported Rust Version
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@1.80.0
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y $APT_DEPS
+
+      - name: Check MSRV compiles
+        run: cargo check --workspace
 
   build:
     name: Build
@@ -96,7 +130,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
 
       - name: Install cargo-deny
-        run: cargo install cargo-deny
+        run: cargo install cargo-deny --quiet
 
       - name: Check licenses and advisories
         run: cargo deny check
