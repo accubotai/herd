@@ -4,9 +4,7 @@ mod app;
 
 fn main() -> Result<()> {
     // Initialize logging
-    tracing_subscriber::fmt()
-        .with_env_filter("info")
-        .init();
+    tracing_subscriber::fmt().with_env_filter("info").init();
 
     tracing::info!("Starting SoloTerm");
 

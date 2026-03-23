@@ -16,7 +16,7 @@ pub enum ConfigError {
 }
 
 /// Root configuration structure for solo.toml
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct SoloConfig {
     #[serde(default)]
     pub project: ProjectConfig,
@@ -164,6 +164,7 @@ impl SoloConfig {
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
 
@@ -261,7 +262,7 @@ DEBUG = "true"
     fn test_defaults() {
         let config: SoloConfig = toml::from_str("").unwrap();
         assert_eq!(config.ui.theme, "dark");
-        assert_eq!(config.ui.font_size, 14.0);
+        assert!((config.ui.font_size - 14.0).abs() < f32::EPSILON);
         assert_eq!(config.ui.sidebar_width, 280);
         assert!(!config.ai.mcp_enabled);
     }

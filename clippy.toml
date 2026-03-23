@@ -1,0 +1,9 @@
+# Clippy configuration
+# Max cognitive complexity before warning
+cognitive-complexity-threshold = 25
+# Max lines in a function
+too-many-lines-threshold = 100
+# Max function arguments
+too-many-arguments-threshold = 7
+# Max type complexity
+type-complexity-threshold = 250

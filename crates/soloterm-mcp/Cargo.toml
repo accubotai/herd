@@ -5,6 +5,9 @@ description = "MCP server exposing SoloTerm workspace to AI agents"
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
+[lints]
+workspace = true
+
 
 [dependencies]
 soloterm-core = { workspace = true }

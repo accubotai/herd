@@ -55,7 +55,7 @@ impl Supervisor {
         let handle = self
             .processes
             .get_mut(name)
-            .ok_or_else(|| anyhow::anyhow!("Process not found: {}", name))?;
+            .ok_or_else(|| anyhow::anyhow!("Process not found: {name}"))?;
 
         handle.spawn()?;
         Ok(())
@@ -66,7 +66,7 @@ impl Supervisor {
         let handle = self
             .processes
             .get_mut(name)
-            .ok_or_else(|| anyhow::anyhow!("Process not found: {}", name))?;
+            .ok_or_else(|| anyhow::anyhow!("Process not found: {name}"))?;
 
         handle.stop();
         Ok(())
@@ -171,6 +171,7 @@ impl Default for Supervisor {
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
     use soloterm_config::ProcessConfig;

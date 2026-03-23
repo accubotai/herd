@@ -54,6 +54,7 @@ pub struct ProcessHandle {
     pub terminal: Arc<FairMutex<Term<EventProxy>>>,
     pub started_at: Option<Instant>,
     event_sender: tokio::sync::mpsc::UnboundedSender<ProcessEvent>,
+    #[allow(clippy::used_underscore_binding)]
     _event_loop_handle: Option<
         std::thread::JoinHandle<(
             EventLoop<tty::Pty, EventProxy>,
@@ -62,7 +63,7 @@ pub struct ProcessHandle {
     >,
 }
 
-/// Proxy for alacritty_terminal events — forwards to our event system
+/// Proxy for `alacritty_terminal` events — forwards to our event system
 #[derive(Clone)]
 pub struct EventProxy {
     pub process_name: String,
@@ -219,7 +220,7 @@ impl ProcessHandle {
     /// Send SIGTERM to stop the process
     pub fn stop(&mut self) {
         if let Some(pid) = self.pid {
-            let pid = nix::unistd::Pid::from_raw(pid as i32);
+            let pid = nix::unistd::Pid::from_raw(i32::try_from(pid).unwrap_or(0));
             let _ = nix::sys::signal::kill(pid, nix::sys::signal::Signal::SIGTERM);
             self.state = ProcessState::Stopped;
             tracing::info!(name = %self.info.name, "Process stopped");

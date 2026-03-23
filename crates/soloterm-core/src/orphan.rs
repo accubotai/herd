@@ -25,7 +25,7 @@ impl OrphanTracker {
             .join("pids");
 
         Self {
-            pid_file: pid_dir.join(format!("{}.pids", project_id)),
+            pid_file: pid_dir.join(format!("{project_id}.pids")),
             pids: HashSet::new(),
         }
     }
@@ -51,7 +51,7 @@ impl OrphanTracker {
                 if let Ok(pid) = line.trim().parse::<u32>() {
                     if is_process_alive(pid) {
                         tracing::warn!(pid, "Killing orphaned process");
-                        let nix_pid = nix::unistd::Pid::from_raw(pid as i32);
+                        let nix_pid = nix::unistd::Pid::from_raw(i32::try_from(pid).unwrap_or(0));
                         let _ = nix::sys::signal::kill(nix_pid, nix::sys::signal::Signal::SIGTERM);
                         killed.push(pid);
                     }
@@ -73,7 +73,7 @@ impl OrphanTracker {
         let content: String = self
             .pids
             .iter()
-            .map(|pid| pid.to_string())
+            .map(std::string::ToString::to_string)
             .collect::<Vec<_>>()
             .join("\n");
         fs::write(&self.pid_file, content)?;
@@ -83,7 +83,7 @@ impl OrphanTracker {
 
 fn is_process_alive(pid: u32) -> bool {
     // Check if /proc/PID exists (Linux-specific)
-    PathBuf::from(format!("/proc/{}", pid)).exists()
+    PathBuf::from(format!("/proc/{pid}")).exists()
 }
 
 impl Drop for OrphanTracker {

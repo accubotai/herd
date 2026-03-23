@@ -91,18 +91,11 @@ pub fn suggest_processes(framework: &Framework) -> Vec<(&'static str, &'static s
             ("Queue Worker", "php artisan queue:work", "services"),
             ("Logs", "tail -f storage/logs/laravel.log", "services"),
         ],
-        Framework::NextJs => vec![
-            ("Dev Server", "npm run dev", "services"),
-        ],
-        Framework::NodeJs => vec![
-            ("Dev Server", "npm run dev", "services"),
-        ],
-        Framework::Django => vec![
-            ("Dev Server", "python manage.py runserver", "services"),
-        ],
-        Framework::Go => vec![
-            ("Run", "go run .", "services"),
-        ],
+        Framework::NextJs | Framework::NodeJs => {
+            vec![("Dev Server", "npm run dev", "services")]
+        }
+        Framework::Django => vec![("Dev Server", "python manage.py runserver", "services")],
+        Framework::Go => vec![("Run", "go run .", "services")],
         Framework::Rust => vec![
             ("Run", "cargo run", "services"),
             ("Watch", "cargo watch -x run", "services"),
@@ -117,21 +110,17 @@ fn has_dir(dir: &Path, _pattern: &str) -> bool {
 }
 
 fn has_csproj(dir: &Path) -> bool {
-    dir.read_dir()
-        .ok()
-        .map(|entries| {
-            entries
-                .filter_map(|e| e.ok())
-                .any(|e| {
-                    e.path()
-                        .extension()
-                        .is_some_and(|ext| ext == "csproj" || ext == "sln")
-                })
+    dir.read_dir().ok().is_some_and(|entries| {
+        entries.filter_map(std::result::Result::ok).any(|e| {
+            e.path()
+                .extension()
+                .is_some_and(|ext| ext == "csproj" || ext == "sln")
         })
-        .unwrap_or(false)
+    })
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
     use std::fs;

@@ -24,7 +24,6 @@ impl FileWatcher {
         ignore_paths: Vec<PathBuf>,
         tx: mpsc::UnboundedSender<FileChange>,
     ) -> notify::Result<Self> {
-        let name = process_name.clone();
         let mut last_event = Instant::now();
         let debounce = Duration::from_millis(500);
 
@@ -41,15 +40,13 @@ impl FileWatcher {
                 let relevant_paths: Vec<PathBuf> = event
                     .paths
                     .into_iter()
-                    .filter(|p| {
-                        !ignore_paths.iter().any(|ignored| p.starts_with(ignored))
-                    })
+                    .filter(|p| !ignore_paths.iter().any(|ignored| p.starts_with(ignored)))
                     .collect();
 
                 if !relevant_paths.is_empty() {
                     let _ = tx.send(FileChange {
                         paths: relevant_paths,
-                        process_name: name.clone(),
+                        process_name: process_name.clone(),
                     });
                 }
             }

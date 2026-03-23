@@ -5,6 +5,9 @@ description = "GPU-accelerated terminal workspace for agentic development"
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
+[lints]
+workspace = true
+
 
 [[bin]]
 name = "soloterm"

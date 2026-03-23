@@ -65,26 +65,24 @@ impl TrustStore {
     }
 
     pub fn trust_command(&mut self, project_path: &str, command_hash: String) {
-        let project = self
-            .projects
-            .entry(project_path.to_string())
-            .or_default();
+        let project = self.projects.entry(project_path.to_string()).or_default();
         if !project.trusted_commands.contains(&command_hash) {
             project.trusted_commands.push(command_hash);
         }
     }
 
     pub fn trust_all(&mut self, project_path: &str) {
-        let project = self
-            .projects
-            .entry(project_path.to_string())
-            .or_default();
+        let project = self.projects.entry(project_path.to_string()).or_default();
         project.trust_all = true;
     }
 }
 
-/// Compute a simple hash of a command string for trust comparison
-pub fn hash_command(command: &str, working_dir: Option<&str>, env: &HashMap<String, String>) -> String {
+/// Compute a simple hash of a command string for trust comparison.
+pub fn hash_command<S: std::hash::BuildHasher>(
+    command: &str,
+    working_dir: Option<&str>,
+    env: &HashMap<String, String, S>,
+) -> String {
     use std::collections::BTreeMap;
     // Sort env for deterministic hashing
     let sorted_env: BTreeMap<_, _> = env.iter().collect();
@@ -101,12 +99,13 @@ pub fn hash_command(command: &str, working_dir: Option<&str>, env: &HashMap<Stri
 fn fxhash(s: &str) -> u64 {
     let mut hash: u64 = 0;
     for byte in s.bytes() {
-        hash = hash.rotate_left(5) ^ (byte as u64);
+        hash = hash.rotate_left(5) ^ u64::from(byte);
     }
     hash
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
 

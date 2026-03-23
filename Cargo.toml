@@ -67,6 +67,52 @@ unicode-width = "0.2"
 dirs = "6"
 regex = "1"
 
+# ── Workspace-wide lint configuration ──
+[workspace.lints.rust]
+unsafe_code = "deny"
+unused_must_use = "deny"
+unused_imports = "warn"
+dead_code = "warn"
+unreachable_pub = "warn"
+
+[workspace.lints.clippy]
+# Correctness
+correctness = { level = "deny", priority = -1 }
+# Suspicious code
+suspicious = { level = "warn", priority = -1 }
+# Style enforcement
+style = { level = "warn", priority = -1 }
+# Complexity reduction
+complexity = { level = "warn", priority = -1 }
+# Performance suggestions
+perf = { level = "warn", priority = -1 }
+# Pedantic (opinionated but useful)
+pedantic = { level = "warn", priority = -1 }
+
+# Specific pedantic overrides (too noisy or conflicts with our style)
+module_name_repetitions = "allow"
+must_use_candidate = "allow"
+missing_errors_doc = "allow"
+missing_panics_doc = "allow"
+
+# Additional strict lints
+unwrap_used = "warn"
+expect_used = "warn"
+panic = "warn"
+todo = "warn"
+unimplemented = "warn"
+dbg_macro = "deny"
+print_stdout = "warn"
+print_stderr = "warn"
+wildcard_imports = "warn"
+redundant_closure_for_method_calls = "warn"
+manual_string_new = "warn"
+inefficient_to_string = "warn"
+implicit_clone = "warn"
+cloned_instead_of_copied = "warn"
+flat_map_option = "warn"
+needless_pass_by_value = "warn"
+
 [profile.release]
 lto = "thin"
 strip = true

@@ -10,8 +10,8 @@ pub enum NotifyError {
 /// Send a desktop notification for a process crash
 pub fn notify_crash(process_name: &str, exit_code: Option<i32>) -> Result<(), NotifyError> {
     let body = match exit_code {
-        Some(code) => format!("Process '{}' exited with code {}", process_name, code),
-        None => format!("Process '{}' was killed by a signal", process_name),
+        Some(code) => format!("Process '{process_name}' exited with code {code}"),
+        None => format!("Process '{process_name}' was killed by a signal"),
     };
 
     Notification::new()
@@ -28,7 +28,7 @@ pub fn notify_crash(process_name: &str, exit_code: Option<i32>) -> Result<(), No
 pub fn notify_restart(process_name: &str) -> Result<(), NotifyError> {
     Notification::new()
         .summary("SoloTerm: Process Restarted")
-        .body(&format!("Process '{}' has been restarted", process_name))
+        .body(&format!("Process '{process_name}' has been restarted"))
         .icon("dialog-information")
         .urgency(notify_rust::Urgency::Normal)
         .show()?;

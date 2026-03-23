@@ -1,0 +1,45 @@
+#!/usr/bin/env bash
+# Pre-commit hook: fast checks that should pass before every commit.
+# Install: git config core.hooksPath .githooks
+set -euo pipefail
+
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[0;33m'
+NC='\033[0m'
+
+echo -e "${YELLOW}[pre-commit]${NC} Running checks..."
+
+# 1. Format check (instant)
+echo -n "  rustfmt... "
+if cargo fmt --all -- --check >/dev/null 2>&1; then
+    echo -e "${GREEN}OK${NC}"
+else
+    echo -e "${RED}FAILED${NC}"
+    echo "  Run 'cargo fmt --all' to fix formatting."
+    exit 1
+fi
+
+# 2. Clippy (fast, cached builds)
+echo -n "  clippy... "
+if cargo clippy --workspace --all-targets -- -D warnings >/dev/null 2>&1; then
+    echo -e "${GREEN}OK${NC}"
+else
+    echo -e "${RED}FAILED${NC}"
+    echo "  Fix clippy warnings before committing."
+    cargo clippy --workspace --all-targets -- -D warnings 2>&1 | head -30
+    exit 1
+fi
+
+# 3. Check for dbg! macros, todo!, and print statements in non-test code
+echo -n "  no debug artifacts... "
+if grep -rn --include='*.rs' -E '^\s*(dbg!|todo!|unimplemented!)' crates/ | grep -v '#\[cfg(test)\]' | grep -v '/tests/' | grep -v 'test_' | head -1 | grep -q .; then
+    echo -e "${RED}FAILED${NC}"
+    echo "  Found dbg!/todo!/unimplemented! in non-test code:"
+    grep -rn --include='*.rs' -E '^\s*(dbg!|todo!|unimplemented!)' crates/ | grep -v '/tests/' | head -5
+    exit 1
+else
+    echo -e "${GREEN}OK${NC}"
+fi
+
+echo -e "${GREEN}[pre-commit]${NC} All checks passed."

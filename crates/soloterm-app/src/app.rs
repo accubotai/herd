@@ -1,31 +1,25 @@
 use iced::widget::{column, container, row, text};
 use iced::{Element, Length, Theme};
 
-/// Main SoloTerm application state
+/// Main `SoloTerm` application state.
 #[derive(Default)]
-pub struct SoloTermApp {
-    /// Currently selected process index
-    selected_process: usize,
+pub(crate) struct SoloTermApp {
     /// Status message
     status: String,
 }
 
 #[derive(Debug, Clone)]
-pub enum Message {
-    /// Select a process in the sidebar
-    SelectProcess(usize),
+pub(crate) enum Message {
+    // Placeholder — real messages will be added in Phase 2
 }
 
 impl SoloTermApp {
-    pub fn update(&mut self, message: Message) {
-        match message {
-            Message::SelectProcess(idx) => {
-                self.selected_process = idx;
-            }
-        }
+    #[allow(clippy::unused_self)]
+    pub(crate) fn update(&mut self, _message: Message) {
+        // Will handle real messages in Phase 2
     }
 
-    pub fn view(&self) -> Element<'_, Message> {
+    pub(crate) fn view(&self) -> Element<'_, Message> {
         let sidebar = container(
             column![
                 text("SoloTerm").size(20),
@@ -62,7 +56,8 @@ impl SoloTermApp {
             .into()
     }
 
-    pub fn theme(&self) -> Theme {
+    #[allow(clippy::unused_self)]
+    pub(crate) fn theme(&self) -> Theme {
         Theme::Dark
     }
 }

@@ -31,10 +31,18 @@ jobs:
       - name: Check formatting
         run: cargo fmt --all -- --check
 
-      - name: Run clippy
+      - name: Run clippy (strict — deny all warnings)
         run: cargo clippy --workspace --all-targets -- -D warnings
 
-      - name: Check documentation
+      - name: Check for debug artifacts
+        run: |
+          if grep -rn --include='*.rs' -E '^\s*(dbg!|todo!|unimplemented!)' crates/ | grep -v '#\[cfg(test)\]' | grep -v '/tests/' | head -1 | grep -q .; then
+            echo "Found dbg!/todo!/unimplemented! in non-test code"
+            grep -rn --include='*.rs' -E '^\s*(dbg!|todo!|unimplemented!)' crates/ | grep -v '/tests/'
+            exit 1
+          fi
+
+      - name: Check documentation builds
         run: cargo doc --workspace --no-deps
 
   test:
@@ -42,9 +50,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
       - uses: dtolnay/rust-toolchain@stable
-
       - uses: Swatinem/rust-cache@v2
 
       - name: Install system dependencies
@@ -63,9 +69,7 @@ jobs:
         os: [ubuntu-22.04, ubuntu-24.04]
     steps:
       - uses: actions/checkout@v4
-
       - uses: dtolnay/rust-toolchain@stable
-
       - uses: Swatinem/rust-cache@v2
 
       - name: Install system dependencies
@@ -75,3 +79,16 @@ jobs:
 
       - name: Build release
         run: cargo build --release
+
+  deny:
+    name: License & Advisory Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Install cargo-deny
+        run: cargo install cargo-deny
+
+      - name: Check licenses and advisories
+        run: cargo deny check

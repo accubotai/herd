@@ -1,0 +1,88 @@
+#!/usr/bin/env bash
+# Pre-push hook: comprehensive checks before pushing.
+# These are slower but catch more issues.
+# Install: git config core.hooksPath .githooks
+set -euo pipefail
+
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[0;33m'
+NC='\033[0m'
+
+echo -e "${YELLOW}[pre-push]${NC} Running full verification suite..."
+
+# 1. Format check
+echo -n "  rustfmt... "
+if cargo fmt --all -- --check >/dev/null 2>&1; then
+    echo -e "${GREEN}OK${NC}"
+else
+    echo -e "${RED}FAILED${NC}"
+    exit 1
+fi
+
+# 2. Clippy (strict)
+echo -n "  clippy... "
+if cargo clippy --workspace --all-targets -- -D warnings >/dev/null 2>&1; then
+    echo -e "${GREEN}OK${NC}"
+else
+    echo -e "${RED}FAILED${NC}"
+    cargo clippy --workspace --all-targets -- -D warnings 2>&1 | head -20
+    exit 1
+fi
+
+# 3. Full test suite
+echo -n "  tests... "
+if cargo test --workspace >/dev/null 2>&1; then
+    echo -e "${GREEN}OK${NC}"
+else
+    echo -e "${RED}FAILED${NC}"
+    cargo test --workspace 2>&1 | tail -20
+    exit 1
+fi
+
+# 4. Security audit
+echo -n "  cargo audit... "
+if command -v cargo-audit >/dev/null 2>&1; then
+    if cargo audit --quiet >/dev/null 2>&1; then
+        echo -e "${GREEN}OK${NC}"
+    else
+        echo -e "${YELLOW}WARNINGS${NC} (check 'cargo audit' output)"
+    fi
+else
+    echo -e "${YELLOW}SKIPPED${NC} (install: cargo install cargo-audit)"
+fi
+
+# 5. License & advisory check
+echo -n "  cargo deny... "
+if command -v cargo-deny >/dev/null 2>&1; then
+    if cargo deny check >/dev/null 2>&1; then
+        echo -e "${GREEN}OK${NC}"
+    else
+        echo -e "${YELLOW}WARNINGS${NC} (check 'cargo deny check' output)"
+    fi
+else
+    echo -e "${YELLOW}SKIPPED${NC} (install: cargo install cargo-deny)"
+fi
+
+# 6. Unused dependencies
+echo -n "  cargo machete... "
+if command -v cargo-machete >/dev/null 2>&1; then
+    if cargo machete >/dev/null 2>&1; then
+        echo -e "${GREEN}OK${NC}"
+    else
+        echo -e "${YELLOW}WARNINGS${NC} (check 'cargo machete' output)"
+    fi
+else
+    echo -e "${YELLOW}SKIPPED${NC} (install: cargo install cargo-machete)"
+fi
+
+# 7. Build release to ensure it compiles
+echo -n "  release build... "
+if cargo build --release >/dev/null 2>&1; then
+    echo -e "${GREEN}OK${NC}"
+else
+    echo -e "${RED}FAILED${NC}"
+    exit 1
+fi
+
+echo -e "${GREEN}[pre-push]${NC} All checks passed. Pushing..."

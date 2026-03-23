@@ -3,7 +3,7 @@ use alacritty_terminal::term::cell::Flags;
 use alacritty_terminal::term::Term;
 use alacritty_terminal::vte::ansi::{Color, CursorShape, NamedColor};
 
-/// A cell ready for rendering with resolved colors
+/// A cell ready for rendering with resolved colors.
 #[derive(Debug, Clone)]
 pub struct RenderableCell {
     pub x: usize,
@@ -14,7 +14,7 @@ pub struct RenderableCell {
     pub flags: CellFlags,
 }
 
-/// Simplified color representation for the renderer
+/// Simplified color representation for the renderer.
 #[derive(Debug, Clone, Copy)]
 pub enum CellColor {
     Named(NamedColorId),
@@ -22,7 +22,7 @@ pub enum CellColor {
     Rgb(u8, u8, u8),
 }
 
-/// Named color identifiers (matching standard terminal colors)
+/// Named color identifiers (matching standard terminal colors).
 #[derive(Debug, Clone, Copy)]
 pub enum NamedColorId {
     Black,
@@ -46,8 +46,9 @@ pub enum NamedColorId {
     Cursor,
 }
 
-/// Simplified cell flags for rendering
+/// Simplified cell flags for rendering.
 #[derive(Debug, Clone, Copy, Default)]
+#[allow(clippy::struct_excessive_bools)]
 pub struct CellFlags {
     pub bold: bool,
     pub italic: bool,
@@ -58,7 +59,7 @@ pub struct CellFlags {
     pub hidden: bool,
 }
 
-/// Snapshot of terminal content for rendering
+/// Snapshot of terminal content for rendering.
 #[derive(Debug, Clone)]
 pub struct TerminalContent {
     pub cells: Vec<RenderableCell>,
@@ -69,7 +70,7 @@ pub struct TerminalContent {
     pub cursor_visible: bool,
 }
 
-/// Extract renderable content from an alacritty_terminal::Term
+/// Extract renderable content from an `alacritty_terminal::Term`.
 pub fn extract_content<T: alacritty_terminal::event::EventListener>(
     term: &Term<T>,
 ) -> TerminalContent {
@@ -80,12 +81,12 @@ pub fn extract_content<T: alacritty_terminal::event::EventListener>(
 
     let content = term.renderable_content();
 
-    // display_iter yields Indexed<&Cell> with .point and .cell
     for indexed in content.display_iter {
         let cell = &indexed.cell;
+        let line = indexed.point.line.0;
         let renderable = RenderableCell {
             x: indexed.point.column.0,
-            y: indexed.point.line.0 as usize,
+            y: usize::try_from(line).unwrap_or(0),
             character: cell.c,
             fg: convert_color(cell.fg),
             bg: convert_color(cell.bg),
@@ -94,16 +95,16 @@ pub fn extract_content<T: alacritty_terminal::event::EventListener>(
         cells.push(renderable);
     }
 
-    // RenderableCursor has .shape and .point (no is_hidden)
     let cursor = content.cursor;
     let cursor_visible = cursor.shape != CursorShape::Hidden;
+    let cursor_line = cursor.point.line.0;
 
     TerminalContent {
         cells,
         cols,
         rows,
         cursor_x: cursor.point.column.0,
-        cursor_y: cursor.point.line.0 as usize,
+        cursor_y: usize::try_from(cursor_line).unwrap_or(0),
         cursor_visible,
     }
 }
@@ -118,14 +119,14 @@ fn convert_color(color: Color) -> CellColor {
 
 fn convert_named_color(named: NamedColor) -> NamedColorId {
     match named {
-        NamedColor::Black => NamedColorId::Black,
-        NamedColor::Red => NamedColorId::Red,
-        NamedColor::Green => NamedColorId::Green,
-        NamedColor::Yellow => NamedColorId::Yellow,
-        NamedColor::Blue => NamedColorId::Blue,
-        NamedColor::Magenta => NamedColorId::Magenta,
-        NamedColor::Cyan => NamedColorId::Cyan,
-        NamedColor::White => NamedColorId::White,
+        NamedColor::Black | NamedColor::DimBlack => NamedColorId::Black,
+        NamedColor::Red | NamedColor::DimRed => NamedColorId::Red,
+        NamedColor::Green | NamedColor::DimGreen => NamedColorId::Green,
+        NamedColor::Yellow | NamedColor::DimYellow => NamedColorId::Yellow,
+        NamedColor::Blue | NamedColor::DimBlue => NamedColorId::Blue,
+        NamedColor::Magenta | NamedColor::DimMagenta => NamedColorId::Magenta,
+        NamedColor::Cyan | NamedColor::DimCyan => NamedColorId::Cyan,
+        NamedColor::White | NamedColor::DimWhite => NamedColorId::White,
         NamedColor::BrightBlack => NamedColorId::BrightBlack,
         NamedColor::BrightRed => NamedColorId::BrightRed,
         NamedColor::BrightGreen => NamedColorId::BrightGreen,
@@ -134,10 +135,11 @@ fn convert_named_color(named: NamedColor) -> NamedColorId {
         NamedColor::BrightMagenta => NamedColorId::BrightMagenta,
         NamedColor::BrightCyan => NamedColorId::BrightCyan,
         NamedColor::BrightWhite => NamedColorId::BrightWhite,
-        NamedColor::Foreground => NamedColorId::Foreground,
+        NamedColor::Foreground | NamedColor::BrightForeground | NamedColor::DimForeground => {
+            NamedColorId::Foreground
+        }
         NamedColor::Background => NamedColorId::Background,
         NamedColor::Cursor => NamedColorId::Cursor,
-        _ => NamedColorId::Foreground,
     }
 }
 

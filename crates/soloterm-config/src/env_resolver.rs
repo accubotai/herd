@@ -4,7 +4,8 @@ use std::sync::LazyLock;
 
 static ENV_PATTERN: LazyLock<Regex> = LazyLock::new(|| {
     // Matches ${VAR} and ${VAR:-default}
-    Regex::new(r"\$\{([A-Za-z_][A-Za-z0-9_]*)(?::-([^}]*))?\}").unwrap()
+    #[allow(clippy::unwrap_used, clippy::expect_used)]
+    Regex::new(r"\$\{([A-Za-z_][A-Za-z0-9_]*)(?::-([^}]*))?\}").expect("env var regex is valid")
 });
 
 /// Resolve environment variable references in a string.
@@ -16,13 +17,14 @@ pub fn resolve(input: &str) -> String {
     ENV_PATTERN
         .replace_all(input, |caps: &regex::Captures| {
             let var_name = &caps[1];
-            let default_value = caps.get(2).map(|m| m.as_str()).unwrap_or("");
+            let default_value = caps.get(2).map_or("", |m| m.as_str());
             env::var(var_name).unwrap_or_else(|_| default_value.to_string())
         })
         .into_owned()
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
     use std::env;

@@ -5,6 +5,9 @@ description = "Terminal rendering bridge between alacritty_terminal and wgpu for
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
+[lints]
+workspace = true
+
 
 [dependencies]
 alacritty_terminal = { workspace = true }
