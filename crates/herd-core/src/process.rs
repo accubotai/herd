@@ -2,18 +2,14 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use std::time::Instant;
 
-use alacritty_terminal::event::{EventListener, WindowSize};
+use alacritty_terminal::event::EventListener;
 use alacritty_terminal::event_loop::EventLoop;
 use alacritty_terminal::sync::FairMutex;
 use alacritty_terminal::term::Term;
 use alacritty_terminal::tty;
 use std::sync::Arc;
 
-/// Default terminal dimensions
-pub const DEFAULT_COLS: u16 = 80;
-pub const DEFAULT_ROWS: u16 = 24;
-pub const DEFAULT_CELL_WIDTH: u16 = 8;
-pub const DEFAULT_CELL_HEIGHT: u16 = 16;
+use crate::pty;
 
 /// Current state of a managed process
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -129,15 +125,6 @@ impl alacritty_terminal::grid::Dimensions for TermSize {
     }
 }
 
-pub fn default_window_size() -> WindowSize {
-    WindowSize {
-        num_lines: DEFAULT_ROWS,
-        num_cols: DEFAULT_COLS,
-        cell_width: DEFAULT_CELL_WIDTH,
-        cell_height: DEFAULT_CELL_HEIGHT,
-    }
-}
-
 impl ProcessHandle {
     pub fn new(
         info: ProcessInfo,
@@ -151,8 +138,8 @@ impl ProcessHandle {
         // Create terminal with default size
         let term_config = alacritty_terminal::term::Config::default();
         let dimensions = TermSize {
-            cols: DEFAULT_COLS as usize,
-            rows: DEFAULT_ROWS as usize,
+            cols: pty::DEFAULT_COLS as usize,
+            rows: pty::DEFAULT_ROWS as usize,
             history: 10000,
         };
         let terminal = Term::new(term_config, &dimensions, event_proxy);
@@ -171,7 +158,7 @@ impl ProcessHandle {
 
     /// Spawn the process with its own PTY
     pub fn spawn(&mut self) -> anyhow::Result<()> {
-        let window_size = default_window_size();
+        let window_size = pty::default_window_size();
 
         // Build PTY config
         let pty_config = tty::Options {
@@ -217,11 +204,28 @@ impl ProcessHandle {
         Ok(())
     }
 
-    /// Send SIGTERM to stop the process
+    /// Send SIGTERM to stop the process.
     pub fn stop(&mut self) {
         if let Some(pid) = self.pid {
-            let pid = nix::unistd::Pid::from_raw(i32::try_from(pid).unwrap_or(0));
-            let _ = nix::sys::signal::kill(pid, nix::sys::signal::Signal::SIGTERM);
+            match i32::try_from(pid) {
+                Ok(raw_pid) if raw_pid > 0 => {
+                    let nix_pid = nix::unistd::Pid::from_raw(raw_pid);
+                    if let Err(e) =
+                        nix::sys::signal::kill(nix_pid, nix::sys::signal::Signal::SIGTERM)
+                    {
+                        tracing::warn!(
+                            name = %self.info.name, pid, error = %e,
+                            "Failed to send SIGTERM"
+                        );
+                    }
+                }
+                _ => {
+                    tracing::error!(
+                        name = %self.info.name, pid,
+                        "Invalid PID — cannot send signal"
+                    );
+                }
+            }
             self.state = ProcessState::Stopped;
             tracing::info!(name = %self.info.name, "Process stopped");
         }

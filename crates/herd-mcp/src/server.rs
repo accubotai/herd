@@ -1,21 +1,44 @@
+//! MCP Server that exposes Herd workspace capabilities to AI agents.
+//!
+//! # Security
+//!
+//! - **Stdio transport**: Safe — requires local process access.
+//! - **HTTP transport**: MUST bind to `127.0.0.1` only. Authentication is required
+//!   before this transport can be used in production. See `Transport::Http`.
+//!
+//! The server only exposes structured process management operations (start, stop,
+//! restart, status). Arbitrary command execution (`run_command`) was intentionally
+//! removed — it would be an unauthenticated RCE vector.
+
 use serde_json::Value;
 
-/// MCP Server that exposes `Herd` workspace capabilities to AI agents.
-///
-/// Implements the Model Context Protocol specification to allow
-/// AI agents (Claude Code, Codex, Gemini CLI, etc.) to:
-/// - Query process status
-/// - Read terminal output
-/// - Restart crashed services
-/// - Execute commands
+/// MCP Server for Herd workspace.
 pub struct McpServer {
     transport: Transport,
 }
 
+/// Transport layer for MCP communication.
 #[derive(Debug, Clone)]
 pub enum Transport {
+    /// Stdio transport — safe, requires local process access.
     Stdio,
-    Http { port: u16 },
+    /// HTTP transport — **SECURITY**: always binds to 127.0.0.1.
+    /// Authentication must be implemented before enabling remote access.
+    Http {
+        port: u16,
+        /// Always 127.0.0.1 — never expose to network without auth.
+        bind_address: std::net::Ipv4Addr,
+    },
+}
+
+impl Transport {
+    /// Create an HTTP transport bound to localhost only.
+    pub fn http(port: u16) -> Self {
+        Self::Http {
+            port,
+            bind_address: std::net::Ipv4Addr::LOCALHOST,
+        }
+    }
 }
 
 impl McpServer {
@@ -29,8 +52,8 @@ impl McpServer {
             Transport::Stdio => {
                 tracing::info!("MCP server starting on stdio");
             }
-            Transport::Http { port } => {
-                tracing::info!(port, "MCP server starting on HTTP");
+            Transport::Http { port, bind_address } => {
+                tracing::info!(%port, %bind_address, "MCP server starting on HTTP");
             }
         }
         Ok(())
@@ -39,30 +62,39 @@ impl McpServer {
     /// Handle an incoming MCP JSON-RPC request.
     pub fn handle_request(&self, request: &Value) -> Value {
         let method = request.get("method").and_then(|m| m.as_str()).unwrap_or("");
+        let id = request.get("id").cloned();
 
-        match method {
+        let mut response = match method {
             "initialize" => Self::handle_initialize(),
             "tools/list" => Self::handle_tools_list(),
             "tools/call" => Self::handle_tool_call(request),
             "resources/list" => Self::handle_resources_list(),
             "resources/read" => Self::handle_resource_read(request),
-            _ => serde_json::json!({
-                "error": {
-                    "code": -32601,
-                    "message": format!("Method not found: {method}")
-                }
+            "" => serde_json::json!({
+                "error": { "code": -32600, "message": "Missing or invalid 'method' field" }
             }),
+            _ => {
+                // Truncate method name to prevent log/response injection
+                let safe_method: String = method.chars().take(100).collect();
+                serde_json::json!({
+                    "error": { "code": -32601, "message": format!("Method not found: {safe_method}") }
+                })
+            }
+        };
+
+        // Propagate JSON-RPC id for proper response routing
+        if let (Some(id_val), Some(obj)) = (id, response.as_object_mut()) {
+            obj.insert("id".to_string(), id_val);
         }
+
+        response
     }
 
     fn handle_initialize() -> Value {
         serde_json::json!({
             "protocolVersion": "2024-11-05",
             "capabilities": { "tools": {}, "resources": {} },
-            "serverInfo": {
-                "name": "herd",
-                "version": env!("CARGO_PKG_VERSION")
-            }
+            "serverInfo": { "name": "herd", "version": env!("CARGO_PKG_VERSION") }
         })
     }
 
@@ -105,15 +137,62 @@ impl McpServer {
         })
     }
 
+    /// Tool definitions — only structured process management operations.
+    ///
+    /// `run_command` was intentionally removed. Arbitrary command execution
+    /// through MCP is an unauthenticated RCE vector. If needed in the future,
+    /// it must require: (1) authentication, (2) an allowlist, (3) rate limiting.
     fn tool_definitions() -> Value {
         serde_json::json!([
-            { "name": "list_processes", "description": "List all managed processes with status, PID, and resource usage", "inputSchema": { "type": "object", "properties": {} } },
-            { "name": "get_process_output", "description": "Get recent terminal output from a process", "inputSchema": { "type": "object", "properties": { "name": { "type": "string" }, "lines": { "type": "integer", "default": 50 } }, "required": ["name"] } },
-            { "name": "restart_process", "description": "Restart a specific process by name", "inputSchema": { "type": "object", "properties": { "name": { "type": "string" } }, "required": ["name"] } },
-            { "name": "stop_process", "description": "Stop a specific process", "inputSchema": { "type": "object", "properties": { "name": { "type": "string" } }, "required": ["name"] } },
-            { "name": "start_process", "description": "Start a stopped or lazy process", "inputSchema": { "type": "object", "properties": { "name": { "type": "string" } }, "required": ["name"] } },
-            { "name": "run_command", "description": "Execute a one-off shell command and return output", "inputSchema": { "type": "object", "properties": { "command": { "type": "string" }, "working_dir": { "type": "string" } }, "required": ["command"] } },
-            { "name": "get_process_health", "description": "Health check for all processes", "inputSchema": { "type": "object", "properties": {} } }
+            {
+                "name": "list_processes",
+                "description": "List all managed processes with status, PID, and resource usage",
+                "inputSchema": { "type": "object", "properties": {} }
+            },
+            {
+                "name": "get_process_output",
+                "description": "Get recent terminal output from a process",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "name": { "type": "string", "description": "Process name" },
+                        "lines": { "type": "integer", "description": "Number of lines", "default": 50 }
+                    },
+                    "required": ["name"]
+                }
+            },
+            {
+                "name": "restart_process",
+                "description": "Restart a specific managed process by name",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": { "name": { "type": "string" } },
+                    "required": ["name"]
+                }
+            },
+            {
+                "name": "stop_process",
+                "description": "Stop a specific managed process",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": { "name": { "type": "string" } },
+                    "required": ["name"]
+                }
+            },
+            {
+                "name": "start_process",
+                "description": "Start a stopped or lazy managed process",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": { "name": { "type": "string" } },
+                    "required": ["name"]
+                }
+            },
+            {
+                "name": "get_process_health",
+                "description": "Health check showing which processes are running, crashed, or stopped",
+                "inputSchema": { "type": "object", "properties": {} }
+            }
         ])
     }
 }

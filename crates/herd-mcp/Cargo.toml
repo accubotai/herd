@@ -5,15 +5,11 @@ description = "MCP server exposing Herd workspace to AI agents"
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
+
 [lints]
 workspace = true
 
-
 [dependencies]
-herd-core = { workspace = true }
-tokio = { workspace = true }
-serde = { workspace = true }
 serde_json = { workspace = true }
 tracing = { workspace = true }
-thiserror = { workspace = true }
 anyhow = { workspace = true }

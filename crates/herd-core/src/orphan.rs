@@ -1,5 +1,12 @@
+//! Orphan process tracking and cleanup.
+//!
+//! Persists PIDs to disk so that if Herd crashes, orphaned child
+//! processes can be cleaned up on the next launch.
+//! Linux-specific: uses `/proc/PID` to check liveness.
+
 use std::collections::HashSet;
 use std::fs;
+use std::os::unix::fs::PermissionsExt;
 use std::path::PathBuf;
 
 use thiserror::Error;
@@ -10,14 +17,14 @@ pub enum OrphanError {
     Io(#[from] std::io::Error),
 }
 
-/// Tracks PIDs of managed processes to detect and clean up orphans on restart
+/// Tracks PIDs of managed processes to detect and clean up orphans on restart.
 pub struct OrphanTracker {
     pid_file: PathBuf,
     pids: HashSet<u32>,
 }
 
 impl OrphanTracker {
-    /// Default path: ~/.config/herd/pids/<project-hash>
+    /// Create a new tracker. PID file stored at `~/.config/herd/pids/<project_id>.pids`.
     pub fn new(project_id: &str) -> Self {
         let pid_dir = dirs::config_dir()
             .unwrap_or_else(|| PathBuf::from("~/.config"))
@@ -30,19 +37,23 @@ impl OrphanTracker {
         }
     }
 
-    /// Register a new PID
+    /// Register a new PID.
     pub fn register(&mut self, pid: u32) {
         self.pids.insert(pid);
-        let _ = self.save();
+        if let Err(e) = self.save() {
+            tracing::warn!(pid, error = %e, "Failed to persist PID file");
+        }
     }
 
-    /// Unregister a PID (process exited normally)
+    /// Unregister a PID (process exited normally).
     pub fn unregister(&mut self, pid: u32) {
         self.pids.remove(&pid);
-        let _ = self.save();
+        if let Err(e) = self.save() {
+            tracing::warn!(pid, error = %e, "Failed to update PID file");
+        }
     }
 
-    /// Check for and kill orphaned processes from a previous session
+    /// Check for and kill orphaned processes from a previous session.
     pub fn cleanup_orphans(&mut self) -> Vec<u32> {
         let mut killed = Vec::new();
 
@@ -50,18 +61,25 @@ impl OrphanTracker {
             for line in content.lines() {
                 if let Ok(pid) = line.trim().parse::<u32>() {
                     if is_process_alive(pid) {
-                        tracing::warn!(pid, "Killing orphaned process");
-                        let nix_pid = nix::unistd::Pid::from_raw(i32::try_from(pid).unwrap_or(0));
-                        let _ = nix::sys::signal::kill(nix_pid, nix::sys::signal::Signal::SIGTERM);
-                        killed.push(pid);
+                        if let Some(nix_pid) = to_nix_pid(pid) {
+                            tracing::warn!(pid, "Killing orphaned process");
+                            if let Err(e) =
+                                nix::sys::signal::kill(nix_pid, nix::sys::signal::Signal::SIGTERM)
+                            {
+                                tracing::warn!(pid, error = %e, "Failed to kill orphan");
+                            } else {
+                                killed.push(pid);
+                            }
+                        }
                     }
                 }
             }
         }
 
-        // Clear the PID file after cleanup
         self.pids.clear();
-        let _ = self.save();
+        if let Err(e) = self.save() {
+            tracing::warn!(error = %e, "Failed to clear PID file after cleanup");
+        }
 
         killed
     }
@@ -69,6 +87,9 @@ impl OrphanTracker {
     fn save(&self) -> Result<(), OrphanError> {
         if let Some(parent) = self.pid_file.parent() {
             fs::create_dir_all(parent)?;
+            // Restrict directory to owner only
+            let dir_perms = fs::Permissions::from_mode(0o700);
+            let _ = fs::set_permissions(parent, dir_perms);
         }
         let content: String = self
             .pids
@@ -76,19 +97,33 @@ impl OrphanTracker {
             .map(std::string::ToString::to_string)
             .collect::<Vec<_>>()
             .join("\n");
-        fs::write(&self.pid_file, content)?;
+        fs::write(&self.pid_file, &content)?;
+        let perms = fs::Permissions::from_mode(0o600);
+        fs::set_permissions(&self.pid_file, perms)?;
         Ok(())
     }
 }
 
+/// Convert u32 PID to `nix::Pid`, rejecting invalid values (0, overflow).
+fn to_nix_pid(pid: u32) -> Option<nix::unistd::Pid> {
+    i32::try_from(pid)
+        .ok()
+        .filter(|&p| p > 0)
+        .map(nix::unistd::Pid::from_raw)
+}
+
+/// Check if a process is alive (Linux-specific: checks `/proc/PID`).
 fn is_process_alive(pid: u32) -> bool {
-    // Check if /proc/PID exists (Linux-specific)
     PathBuf::from(format!("/proc/{pid}")).exists()
 }
 
 impl Drop for OrphanTracker {
     fn drop(&mut self) {
-        // Clean up PID file on normal exit
-        let _ = fs::remove_file(&self.pid_file);
+        if let Err(e) = fs::remove_file(&self.pid_file) {
+            // Only warn if the file existed (ignore NotFound)
+            if e.kind() != std::io::ErrorKind::NotFound {
+                tracing::warn!(error = %e, "Failed to remove PID file on exit");
+            }
+        }
     }
 }

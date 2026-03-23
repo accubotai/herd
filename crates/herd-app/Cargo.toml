@@ -5,22 +5,23 @@ description = "GPU-accelerated terminal workspace for agentic development"
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
+
 [lints]
 workspace = true
-
 
 [[bin]]
 name = "herd"
 path = "src/main.rs"
 
 [dependencies]
-herd-core = { workspace = true }
-herd-terminal = { workspace = true }
-herd-config = { workspace = true }
-herd-mcp = { workspace = true }
-herd-notify = { workspace = true }
+# These will be wired in during Phase 2
+# herd-core = { workspace = true }
+# herd-terminal = { workspace = true }
+# herd-config = { workspace = true }
+# herd-mcp = { workspace = true }
+# herd-notify = { workspace = true }
+# tokio = { workspace = true }
 iced = { workspace = true }
-tokio = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
 anyhow = { workspace = true }

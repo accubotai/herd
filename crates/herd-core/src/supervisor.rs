@@ -107,7 +107,9 @@ impl Supervisor {
             .collect();
 
         for name in names {
-            let _ = self.stop_process(&name);
+            if let Err(e) = self.stop_process(&name) {
+                tracing::warn!(name = %name, error = %e, "Failed to stop process during stop_all");
+            }
         }
     }
 

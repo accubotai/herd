@@ -1,6 +1,6 @@
 use std::path::Path;
 
-use crate::herd_config::{ConfigError, HerdConfig};
+use crate::config::{ConfigError, HerdConfig};
 
 /// Merge a `.herd.local` file into an existing config.
 ///
