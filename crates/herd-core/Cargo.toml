@@ -1,7 +1,7 @@
 [package]
-name = "soloterm-core"
+name = "herd-core"
 version = "0.1.0"
-description = "Process supervision and PTY management for SoloTerm"
+description = "Process supervision and PTY management for Herd"
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
@@ -10,7 +10,7 @@ workspace = true
 
 
 [dependencies]
-soloterm-config = { workspace = true }
+herd-config = { workspace = true }
 alacritty_terminal = { workspace = true }
 tokio = { workspace = true }
 nix = { workspace = true }

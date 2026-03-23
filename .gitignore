@@ -5,7 +5,7 @@
 *~
 
 # Local config (personal overrides)
-.solo.local
+.herd.local
 
 # IDE
 .idea/

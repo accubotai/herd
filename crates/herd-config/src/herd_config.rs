@@ -15,9 +15,9 @@ pub enum ConfigError {
     NotFound(PathBuf),
 }
 
-/// Root configuration structure for solo.toml
+/// Root configuration structure for herd.toml
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
-pub struct SoloConfig {
+pub struct HerdConfig {
     #[serde(default)]
     pub project: ProjectConfig,
     #[serde(default)]
@@ -123,14 +123,14 @@ fn default_sidebar_width() -> u32 {
     280
 }
 
-impl SoloConfig {
-    /// Load config from a solo.toml file path
+impl HerdConfig {
+    /// Load config from a herd.toml file path
     pub fn load(path: &Path) -> Result<Self, ConfigError> {
         if !path.exists() {
             return Err(ConfigError::NotFound(path.to_path_buf()));
         }
         let content = std::fs::read_to_string(path)?;
-        let mut config: SoloConfig = toml::from_str(&content)?;
+        let mut config: HerdConfig = toml::from_str(&content)?;
 
         // Resolve environment variables in process configs
         for process in &mut config.process {
@@ -152,12 +152,12 @@ impl SoloConfig {
     pub fn find_and_load(start_dir: &Path) -> Result<Self, ConfigError> {
         let mut dir = start_dir.to_path_buf();
         loop {
-            let candidate = dir.join("solo.toml");
+            let candidate = dir.join("herd.toml");
             if candidate.exists() {
                 return Self::load(&candidate);
             }
             if !dir.pop() {
-                return Err(ConfigError::NotFound("solo.toml".into()));
+                return Err(ConfigError::NotFound("herd.toml".into()));
             }
         }
     }
@@ -178,7 +178,7 @@ name = "test-app"
 name = "Server"
 command = "npm run dev"
 "#;
-        let config: SoloConfig = toml::from_str(toml_str).unwrap();
+        let config: HerdConfig = toml::from_str(toml_str).unwrap();
         assert_eq!(config.project.name, "test-app");
         assert_eq!(config.process.len(), 1);
         assert_eq!(config.process[0].name, "Server");
@@ -222,7 +222,7 @@ font_family = "JetBrains Mono"
 font_size = 14.0
 sidebar_width = 300
 "#;
-        let config: SoloConfig = toml::from_str(toml_str).unwrap();
+        let config: HerdConfig = toml::from_str(toml_str).unwrap();
         assert_eq!(config.process.len(), 2);
         assert!(config.process[0].auto_restart);
         assert!(config.process[1].interactive);
@@ -249,7 +249,7 @@ ignore = ["storage/"]
 APP_ENV = "local"
 DEBUG = "true"
 "#;
-        let config: SoloConfig = toml::from_str(toml_str).unwrap();
+        let config: HerdConfig = toml::from_str(toml_str).unwrap();
         let proc = &config.process[0];
         assert_eq!(proc.restart_delay_ms, Some(1000));
         let watch = proc.watch.as_ref().unwrap();
@@ -260,7 +260,7 @@ DEBUG = "true"
 
     #[test]
     fn test_defaults() {
-        let config: SoloConfig = toml::from_str("").unwrap();
+        let config: HerdConfig = toml::from_str("").unwrap();
         assert_eq!(config.ui.theme, "dark");
         assert!((config.ui.font_size - 14.0).abs() < f32::EPSILON);
         assert_eq!(config.ui.sidebar_width, 280);

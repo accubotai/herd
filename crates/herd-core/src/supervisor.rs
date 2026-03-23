@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use tokio::sync::mpsc;
 
-use soloterm_config::ProcessConfig;
+use herd_config::ProcessConfig;
 
 use crate::process::{ProcessEvent, ProcessHandle, ProcessInfo, ProcessState};
 
@@ -174,7 +174,7 @@ impl Default for Supervisor {
 #[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
-    use soloterm_config::ProcessConfig;
+    use herd_config::ProcessConfig;
     use std::collections::HashMap;
 
     fn test_config(name: &str, lazy: bool) -> ProcessConfig {

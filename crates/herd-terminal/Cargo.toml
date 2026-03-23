@@ -1,7 +1,7 @@
 [package]
-name = "soloterm-terminal"
+name = "herd-terminal"
 version = "0.1.0"
-description = "Terminal rendering bridge between alacritty_terminal and wgpu for SoloTerm"
+description = "Terminal rendering bridge between alacritty_terminal and wgpu for Herd"
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true

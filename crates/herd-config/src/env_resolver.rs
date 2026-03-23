@@ -31,31 +31,31 @@ mod tests {
 
     #[test]
     fn test_resolve_existing_var() {
-        env::set_var("SOLOTERM_TEST_VAR", "hello");
-        assert_eq!(resolve("${SOLOTERM_TEST_VAR}"), "hello");
-        env::remove_var("SOLOTERM_TEST_VAR");
+        env::set_var("HERD_TEST_VAR", "hello");
+        assert_eq!(resolve("${HERD_TEST_VAR}"), "hello");
+        env::remove_var("HERD_TEST_VAR");
     }
 
     #[test]
     fn test_resolve_missing_var_empty() {
-        env::remove_var("SOLOTERM_NONEXISTENT");
-        assert_eq!(resolve("${SOLOTERM_NONEXISTENT}"), "");
+        env::remove_var("HERD_NONEXISTENT");
+        assert_eq!(resolve("${HERD_NONEXISTENT}"), "");
     }
 
     #[test]
     fn test_resolve_missing_var_with_default() {
-        env::remove_var("SOLOTERM_NONEXISTENT");
-        assert_eq!(resolve("${SOLOTERM_NONEXISTENT:-fallback}"), "fallback");
+        env::remove_var("HERD_NONEXISTENT");
+        assert_eq!(resolve("${HERD_NONEXISTENT:-fallback}"), "fallback");
     }
 
     #[test]
     fn test_resolve_mixed_content() {
-        env::set_var("SOLOTERM_HOST", "localhost");
+        env::set_var("HERD_HOST", "localhost");
         assert_eq!(
-            resolve("http://${SOLOTERM_HOST}:${SOLOTERM_PORT:-8080}/api"),
+            resolve("http://${HERD_HOST}:${HERD_PORT:-8080}/api"),
             "http://localhost:8080/api"
         );
-        env::remove_var("SOLOTERM_HOST");
+        env::remove_var("HERD_HOST");
     }
 
     #[test]
@@ -65,8 +65,8 @@ mod tests {
 
     #[test]
     fn test_resolve_existing_var_ignores_default() {
-        env::set_var("SOLOTERM_SET_VAR", "actual");
-        assert_eq!(resolve("${SOLOTERM_SET_VAR:-default}"), "actual");
-        env::remove_var("SOLOTERM_SET_VAR");
+        env::set_var("HERD_SET_VAR", "actual");
+        assert_eq!(resolve("${HERD_SET_VAR:-default}"), "actual");
+        env::remove_var("HERD_SET_VAR");
     }
 }

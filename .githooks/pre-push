@@ -4,6 +4,9 @@
 # Install: git config core.hooksPath .githooks
 set -euo pipefail
 
+# Ensure cargo is in PATH
+[[ -f "$HOME/.cargo/env" ]] && source "$HOME/.cargo/env"
+
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[0;33m'

@@ -1,9 +1,9 @@
 use iced::widget::{column, container, row, text};
 use iced::{Element, Length, Theme};
 
-/// Main `SoloTerm` application state.
+/// Main `Herd` application state.
 #[derive(Default)]
-pub(crate) struct SoloTermApp {
+pub(crate) struct HerdApp {
     /// Status message
     status: String,
 }
@@ -13,7 +13,7 @@ pub(crate) enum Message {
     // Placeholder — real messages will be added in Phase 2
 }
 
-impl SoloTermApp {
+impl HerdApp {
     #[allow(clippy::unused_self)]
     pub(crate) fn update(&mut self, _message: Message) {
         // Will handle real messages in Phase 2
@@ -22,11 +22,11 @@ impl SoloTermApp {
     pub(crate) fn view(&self) -> Element<'_, Message> {
         let sidebar = container(
             column![
-                text("SoloTerm").size(20),
+                text("Herd").size(20),
                 text("─────────────").size(14),
                 text("No processes configured").size(12),
                 text(""),
-                text("Create a solo.toml to get started").size(11),
+                text("Create a herd.toml to get started").size(11),
             ]
             .spacing(8)
             .padding(16),

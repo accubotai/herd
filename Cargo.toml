@@ -1,27 +1,27 @@
 [workspace]
 resolver = "2"
 members = [
-    "crates/soloterm-app",
-    "crates/soloterm-core",
-    "crates/soloterm-terminal",
-    "crates/soloterm-mcp",
-    "crates/soloterm-config",
-    "crates/soloterm-notify",
+    "crates/herd-app",
+    "crates/herd-core",
+    "crates/herd-terminal",
+    "crates/herd-mcp",
+    "crates/herd-config",
+    "crates/herd-notify",
 ]
 
 [workspace.package]
 edition = "2021"
 rust-version = "1.80.0"
 license = "MIT OR Apache-2.0"
-repository = "https://github.com/soloterm/soloterm"
+repository = "https://github.com/accubotai/herd"
 
 [workspace.dependencies]
 # Internal crates
-soloterm-core = { path = "crates/soloterm-core" }
-soloterm-terminal = { path = "crates/soloterm-terminal" }
-soloterm-config = { path = "crates/soloterm-config" }
-soloterm-mcp = { path = "crates/soloterm-mcp" }
-soloterm-notify = { path = "crates/soloterm-notify" }
+herd-core = { path = "crates/herd-core" }
+herd-terminal = { path = "crates/herd-terminal" }
+herd-config = { path = "crates/herd-config" }
+herd-mcp = { path = "crates/herd-mcp" }
+herd-notify = { path = "crates/herd-notify" }
 
 # Terminal emulation
 alacritty_terminal = "0.25"

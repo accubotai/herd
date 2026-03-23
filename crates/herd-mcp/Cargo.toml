@@ -1,7 +1,7 @@
 [package]
-name = "soloterm-mcp"
+name = "herd-mcp"
 version = "0.1.0"
-description = "MCP server exposing SoloTerm workspace to AI agents"
+description = "MCP server exposing Herd workspace to AI agents"
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
@@ -10,7 +10,7 @@ workspace = true
 
 
 [dependencies]
-soloterm-core = { workspace = true }
+herd-core = { workspace = true }
 tokio = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }

@@ -1,5 +1,5 @@
-# SoloTerm Project Configuration
-# Copy this to solo.toml and customize for your project.
+# Herd Project Configuration
+# Copy this to herd.toml and customize for your project.
 
 [project]
 name = "my-app"

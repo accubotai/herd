@@ -1,6 +1,6 @@
 use serde_json::Value;
 
-/// MCP Server that exposes `SoloTerm` workspace capabilities to AI agents.
+/// MCP Server that exposes `Herd` workspace capabilities to AI agents.
 ///
 /// Implements the Model Context Protocol specification to allow
 /// AI agents (Claude Code, Codex, Gemini CLI, etc.) to:
@@ -60,7 +60,7 @@ impl McpServer {
             "protocolVersion": "2024-11-05",
             "capabilities": { "tools": {}, "resources": {} },
             "serverInfo": {
-                "name": "soloterm",
+                "name": "herd",
                 "version": env!("CARGO_PKG_VERSION")
             }
         })
@@ -80,9 +80,9 @@ impl McpServer {
                     "mimeType": "application/json"
                 },
                 {
-                    "uri": "config://solo.toml",
+                    "uri": "config://herd.toml",
                     "name": "Project Config",
-                    "description": "Current solo.toml project configuration",
+                    "description": "Current herd.toml project configuration",
                     "mimeType": "application/toml"
                 }
             ]

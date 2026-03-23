@@ -15,7 +15,7 @@ pub fn notify_crash(process_name: &str, exit_code: Option<i32>) -> Result<(), No
     };
 
     Notification::new()
-        .summary("SoloTerm: Process Crashed")
+        .summary("Herd: Process Crashed")
         .body(&body)
         .icon("dialog-warning")
         .urgency(notify_rust::Urgency::Critical)
@@ -27,7 +27,7 @@ pub fn notify_crash(process_name: &str, exit_code: Option<i32>) -> Result<(), No
 /// Send a desktop notification for a process restart
 pub fn notify_restart(process_name: &str) -> Result<(), NotifyError> {
     Notification::new()
-        .summary("SoloTerm: Process Restarted")
+        .summary("Herd: Process Restarted")
         .body(&format!("Process '{process_name}' has been restarted"))
         .icon("dialog-information")
         .urgency(notify_rust::Urgency::Normal)

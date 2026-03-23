@@ -33,11 +33,11 @@ pub struct ProjectTrust {
 }
 
 impl TrustStore {
-    /// Default path: ~/.config/soloterm/trust.toml
+    /// Default path: ~/.config/herd/trust.toml
     pub fn default_path() -> PathBuf {
         dirs::config_dir()
             .unwrap_or_else(|| PathBuf::from("~/.config"))
-            .join("soloterm")
+            .join("herd")
             .join("trust.toml")
     }
 

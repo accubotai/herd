@@ -17,11 +17,11 @@ pub struct OrphanTracker {
 }
 
 impl OrphanTracker {
-    /// Default path: ~/.config/soloterm/pids/<project-hash>
+    /// Default path: ~/.config/herd/pids/<project-hash>
     pub fn new(project_id: &str) -> Self {
         let pid_dir = dirs::config_dir()
             .unwrap_or_else(|| PathBuf::from("~/.config"))
-            .join("soloterm")
+            .join("herd")
             .join("pids");
 
         Self {

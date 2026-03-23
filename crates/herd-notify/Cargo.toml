@@ -1,7 +1,7 @@
 [package]
-name = "soloterm-notify"
+name = "herd-notify"
 version = "0.1.0"
-description = "Desktop notification abstraction for SoloTerm"
+description = "Desktop notification abstraction for Herd"
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
