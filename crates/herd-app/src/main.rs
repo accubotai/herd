@@ -1,6 +1,7 @@
 use anyhow::Result;
 
-mod app;
+pub(crate) mod app;
+mod terminal_widget;
 
 fn main() -> Result<()> {
     tracing_subscriber::fmt().with_env_filter("info").init();

@@ -10,8 +10,10 @@ use herd_core::Supervisor;
 use herd_mcp::server::{McpServer, ProcessSnapshot, SharedProcessState, Transport};
 use herd_terminal::grid_adapter;
 use iced::keyboard;
-use iced::widget::{button, column, container, row, scrollable, text, Column};
-use iced::{color, Element, Font, Length, Subscription, Theme};
+use iced::widget::{button, column, container, row, text, Column};
+use iced::{color, Element, Length, Subscription, Theme};
+
+use crate::terminal_widget::TerminalProgram;
 
 /// Main Herd application state.
 pub(crate) struct HerdApp {
@@ -19,7 +21,8 @@ pub(crate) struct HerdApp {
     supervisor: Supervisor,
     focused: Option<String>,
     process_order: Vec<String>,
-    terminal_text: String,
+    /// GPU terminal renderer for the focused process.
+    terminal_program: Option<TerminalProgram>,
     status: String,
     started: bool,
     /// Shared process state for MCP server.
@@ -81,7 +84,7 @@ impl Default for HerdApp {
             supervisor,
             focused,
             process_order,
-            terminal_text: String::new(),
+            terminal_program: None,
             status,
             started: false,
             mcp_state,
@@ -95,7 +98,7 @@ impl HerdApp {
         match message {
             Message::SelectProcess(name) => {
                 self.focused = Some(name);
-                self.refresh_terminal_text();
+                self.refresh_terminal_content();
             }
             Message::StartAll => {
                 let errors = self.supervisor.start_all();
@@ -106,13 +109,13 @@ impl HerdApp {
                 }
                 self.started = true;
                 self.update_mcp_state();
-                self.refresh_terminal_text();
+                self.refresh_terminal_content();
             }
             Message::StopAll => {
                 self.supervisor.stop_all();
                 self.status = "All processes stopped".to_string();
                 self.update_mcp_state();
-                self.refresh_terminal_text();
+                self.refresh_terminal_content();
             }
             Message::Tick => {
                 if !self.started && self.config.is_some() {
@@ -133,7 +136,7 @@ impl HerdApp {
                 self.drain_file_changes();
 
                 self.update_mcp_state();
-                self.refresh_terminal_text();
+                self.refresh_terminal_content();
             }
             Message::KeyPressed(key, modifiers) => {
                 self.handle_key(&key, modifiers);
@@ -365,58 +368,44 @@ impl HerdApp {
             row![text("No process selected").size(14).color(color!(0x888888))]
         };
 
-        let terminal_content = scrollable(
-            container(
-                text(&self.terminal_text)
-                    .size(13)
-                    .font(Font::MONOSPACE)
-                    .color(color!(0xcccccc)),
-            )
-            .padding(8),
-        )
-        .height(Length::Fill);
+        // GPU-rendered terminal canvas
+        let terminal_canvas: Element<'_, Message> = if let Some(program) = &self.terminal_program {
+            iced::widget::Canvas::new(program)
+                .width(Length::Fill)
+                .height(Length::Fill)
+                .into()
+        } else {
+            container(text("No terminal output").size(12).color(color!(0x666666)))
+                .padding(16)
+                .into()
+        };
 
-        container(column![
-            container(header).padding([8, 12]),
-            terminal_content,
-        ])
-        .width(Length::Fill)
-        .height(Length::Fill)
-        .style(|_theme: &Theme| container::Style {
-            background: Some(iced::Background::Color(color!(0x0d0d1a))),
-            ..Default::default()
-        })
-        .into()
+        container(column![container(header).padding([8, 12]), terminal_canvas,])
+            .width(Length::Fill)
+            .height(Length::Fill)
+            .style(|_theme: &Theme| container::Style {
+                background: Some(iced::Background::Color(color!(0x0d0d1a))),
+                ..Default::default()
+            })
+            .into()
     }
 
-    // ── Terminal text extraction ──
+    // ── Terminal content extraction ──
 
-    fn refresh_terminal_text(&mut self) {
+    fn refresh_terminal_content(&mut self) {
         let Some(name) = &self.focused else {
-            self.terminal_text.clear();
+            self.terminal_program = None;
             return;
         };
 
         let Some(handle) = self.supervisor.get_process(name) else {
-            self.terminal_text.clear();
+            self.terminal_program = None;
             return;
         };
 
         let term = handle.terminal.lock();
         let content = grid_adapter::extract_content(&*term);
-
-        let mut output = String::with_capacity(content.cols * content.rows);
-        let mut current_line: usize = 0;
-
-        for cell in &content.cells {
-            while current_line < cell.y {
-                output.push('\n');
-                current_line += 1;
-            }
-            output.push(cell.character);
-        }
-
-        self.terminal_text = output.trim_end().to_string();
+        self.terminal_program = Some(TerminalProgram::new(content));
     }
 
     // ── Keyboard handling ──

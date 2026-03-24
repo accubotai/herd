@@ -31,7 +31,7 @@ vte = "0.15"
 wgpu = "24"
 
 # UI framework
-iced = { version = "0.13", features = ["wgpu", "tokio"] }
+iced = { version = "0.13", features = ["wgpu", "tokio", "canvas"] }
 
 # Async runtime
 tokio = { version = "1", features = ["full"] }
