@@ -7,6 +7,7 @@ use std::time::Duration;
 use herd_config::HerdConfig;
 use herd_core::process::ProcessState;
 use herd_core::Supervisor;
+use herd_mcp::server::{McpServer, ProcessSnapshot, SharedProcessState, Transport};
 use herd_terminal::grid_adapter;
 use iced::keyboard;
 use iced::widget::{button, column, container, row, scrollable, text, Column};
@@ -16,29 +17,24 @@ use iced::{color, Element, Font, Length, Subscription, Theme};
 pub(crate) struct HerdApp {
     config: Option<HerdConfig>,
     supervisor: Supervisor,
-    /// Name of the focused process (shown in terminal pane).
     focused: Option<String>,
-    /// Ordered list of process names for sidebar display.
     process_order: Vec<String>,
-    /// Terminal text content for the focused process.
     terminal_text: String,
-    /// Status bar message.
     status: String,
-    /// Whether processes have been started.
     started: bool,
+    /// Shared process state for MCP server.
+    mcp_state: SharedProcessState,
+    /// MCP server instance (kept alive).
+    #[allow(dead_code)]
+    mcp_server: Option<McpServer>,
 }
 
 #[derive(Debug, Clone)]
 pub(crate) enum Message {
-    /// Select a process in the sidebar.
     SelectProcess(String),
-    /// Start all non-lazy processes.
     StartAll,
-    /// Stop all processes.
     StopAll,
-    /// Periodic tick to poll terminal state.
     Tick,
-    /// Keyboard event from iced.
     KeyPressed(keyboard::Key, keyboard::Modifiers),
 }
 
@@ -47,7 +43,10 @@ impl Default for HerdApp {
         let cwd = env::current_dir().unwrap_or_default();
         let config = HerdConfig::find_and_load(&cwd).ok();
 
-        let mut supervisor = Supervisor::new();
+        let project_name = config
+            .as_ref()
+            .map_or("default", |c| c.project.name.as_str());
+        let mut supervisor = Supervisor::new(project_name);
         let mut process_order = Vec::new();
 
         if let Some(cfg) = &config {
@@ -63,6 +62,20 @@ impl Default for HerdApp {
             |c| format!("Project: {}", c.project.name),
         );
 
+        // Set up MCP server with shared state
+        let mcp_state = herd_mcp::server::new_shared_state();
+        let mcp_enabled = config.as_ref().is_some_and(|c| c.ai.mcp_enabled);
+
+        let mcp_server = if mcp_enabled {
+            let server = McpServer::new(Transport::Stdio, mcp_state.clone());
+            if let Err(e) = server.start() {
+                tracing::warn!(error = %e, "Failed to start MCP server");
+            }
+            Some(server)
+        } else {
+            None
+        };
+
         Self {
             config,
             supervisor,
@@ -71,6 +84,8 @@ impl Default for HerdApp {
             terminal_text: String::new(),
             status,
             started: false,
+            mcp_state,
+            mcp_server,
         }
     }
 }
@@ -90,15 +105,16 @@ impl HerdApp {
                     self.status = format!("{} process(es) failed to start", errors.len());
                 }
                 self.started = true;
+                self.update_mcp_state();
                 self.refresh_terminal_text();
             }
             Message::StopAll => {
                 self.supervisor.stop_all();
                 self.status = "All processes stopped".to_string();
+                self.update_mcp_state();
                 self.refresh_terminal_text();
             }
             Message::Tick => {
-                // Auto-start processes on first tick
                 if !self.started && self.config.is_some() {
                     let errors = self.supervisor.start_all();
                     if !errors.is_empty() {
@@ -106,6 +122,17 @@ impl HerdApp {
                     }
                     self.started = true;
                 }
+
+                // Process pending delayed restarts
+                self.supervisor.process_pending_restarts();
+
+                // Drain process events (crash/exit detection)
+                self.drain_process_events();
+
+                // Drain file change events (auto-restart)
+                self.drain_file_changes();
+
+                self.update_mcp_state();
                 self.refresh_terminal_text();
             }
             Message::KeyPressed(key, modifiers) => {
@@ -116,7 +143,6 @@ impl HerdApp {
 
     pub(crate) fn view(&self) -> Element<'_, Message> {
         let sidebar = self.view_sidebar();
-
         let terminal_area = self.view_terminal();
 
         let status_bar =
@@ -146,6 +172,63 @@ impl HerdApp {
         Theme::Dark
     }
 
+    // ── Event draining ──
+
+    fn drain_process_events(&mut self) {
+        // We can't take_event_rx every tick, so we use try_recv pattern.
+        // The event_rx is taken once and stored — but since iced owns us
+        // and we can't have async, we drain synchronously via the supervisor.
+        // For now, check process states directly by examining PIDs.
+        for name in &self.process_order {
+            if let Some(handle) = self.supervisor.get_process(name) {
+                if handle.state == ProcessState::Running {
+                    if let Some(pid) = handle.pid {
+                        // Check if process is still alive
+                        if !std::path::Path::new(&format!("/proc/{pid}")).exists() {
+                            // Process died — handle exit
+                            let crashed = self.supervisor.handle_exit(name, None);
+                            if crashed {
+                                self.status = format!("Process '{name}' crashed");
+                                // Send desktop notification
+                                if let Err(e) = herd_notify::notify_crash(name, None) {
+                                    tracing::debug!(error = %e, "Notification failed");
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    #[allow(clippy::unused_self)]
+    fn drain_file_changes(&self) {
+        // File changes are handled by the supervisor's internal watchers
+        // which send events through the file_change channel.
+        // Since we can't easily poll channels from iced's sync update,
+        // we rely on the watcher → supervisor restart path being
+        // triggered through the event loop in future async integration.
+    }
+
+    // ── MCP state sync ──
+
+    fn update_mcp_state(&self) {
+        let snapshots: Vec<ProcessSnapshot> = self
+            .process_order
+            .iter()
+            .filter_map(|name| {
+                self.supervisor.get_process(name).map(|h| ProcessSnapshot {
+                    name: name.clone(),
+                    state: format!("{:?}", h.state),
+                    pid: h.pid,
+                    section: h.info.section.clone(),
+                    command: h.info.command.clone(),
+                })
+            })
+            .collect();
+        *self.mcp_state.lock() = snapshots;
+    }
+
     // ── Sidebar ──
 
     fn view_sidebar(&self) -> Element<'_, Message> {
@@ -165,7 +248,6 @@ impl HerdApp {
                     .into(),
             );
         } else {
-            // Display processes in config order with section headers
             let mut last_section = String::new();
             for name in &self.process_order {
                 let (state, section) = self
@@ -175,7 +257,6 @@ impl HerdApp {
                         (h.state, h.info.section.as_str())
                     });
 
-                // Section header when section changes
                 if section != last_section {
                     sidebar_content.push(
                         text(section.to_uppercase())
@@ -190,7 +271,6 @@ impl HerdApp {
                 sidebar_content.push(self.view_process_item(name, state, is_focused));
             }
 
-            // Control buttons
             sidebar_content.push(text("").into());
             sidebar_content.push(
                 row![
@@ -329,7 +409,6 @@ impl HerdApp {
         let mut current_line: usize = 0;
 
         for cell in &content.cells {
-            // Add newlines for skipped lines
             while current_line < cell.y {
                 output.push('\n');
                 current_line += 1;
@@ -359,7 +438,6 @@ impl HerdApp {
     }
 }
 
-/// Convert an iced keyboard event to bytes for PTY input.
 fn key_to_bytes(key: &keyboard::Key, modifiers: keyboard::Modifiers) -> Option<Vec<u8>> {
     match key {
         keyboard::Key::Character(c) => {
